@@ -385,6 +385,40 @@ export class BackroomsAudio {
     }
   }
 
+  playJump() {
+    if (!this.init() || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(95, now);
+    osc.frequency.exponentialRampToValueAtTime(55, now + 0.07);
+    g.gain.setValueAtTime(0.11, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.08);
+  }
+
+  playLand(levelId = "level_0") {
+    if (!this.init() || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    const isHardSurface =
+      levelId === "level_1" || levelId === "the_hub" || levelId === "level_2";
+    osc.type = isHardSurface ? "triangle" : "sine";
+    osc.frequency.setValueAtTime(isHardSurface ? 115 : 70, now);
+    osc.frequency.exponentialRampToValueAtTime(28, now + 0.11);
+    g.gain.setValueAtTime(isHardSurface ? 0.19 : 0.14, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    osc.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.13);
+  }
+
   playPuddleSplash() {
     if (!this.init() || this.muted) return;
     const now = this.ctx.currentTime;

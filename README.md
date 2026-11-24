@@ -22,6 +22,8 @@ python3 -m http.server 8080
 | :--- | :--- |
 | `W / A / S / D`（`↑ / ↓`） | 移動・ストレイフ |
 | `Shift` | ダッシュ |
+| `Space` | ジャンプ |
+| `C`（切替） / `Ctrl`（長押し） | しゃがみ |
 | マウス移動 (Pointer Lock) / `← / →` / `Q` | 視点回転 |
 | `F` | 懐中電灯 ON/OFF |
 | `E` | インタラクト（階段 / 扉 / Manila休息 / Door B→A / Object 2 Level Key 取得） |
