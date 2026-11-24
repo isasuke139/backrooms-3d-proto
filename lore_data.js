@@ -1,0 +1,463 @@
+/**
+ * Canonical Backrooms Wiki lore, level environment specs, entity records,
+ * and texture bindings.
+ *
+ * Pure ES module with zero DOM or Three.js dependencies so it can be shared
+ * across browser rendering, Node.js automated tests, and future Godot 4.3
+ * Resource (.tres) compilers.
+ *
+ * Source: The Backrooms Wiki (Fandom) — https://backrooms.fandom.com/wiki/Backrooms_Wiki
+ * License: CC-BY-SA-3.0 — https://creativecommons.org/licenses/by-sa/3.0/
+ */
+
+export const LICENSE_INFO = Object.freeze({
+  name: "CC-BY-SA-3.0",
+  url: "https://creativecommons.org/licenses/by-sa/3.0/",
+  wikiName: "The Backrooms Wiki (Fandom)",
+  wikiUrl: "https://backrooms.fandom.com/wiki/Backrooms_Wiki",
+  apiUrl: "https://backrooms.fandom.com/api.php",
+});
+
+export const LEVELS = Object.freeze({
+  level_0: {
+    id: "level_0",
+    name: 'Level 0: "The Lobby"',
+    subtitle: "Ceaseless Mono-Yellow Retail Backrooms",
+    wikiTitle: "Level 0",
+    wikiUrl: "https://backrooms.fandom.com/wiki/Level_0",
+    sourcePagePath: "dataset/pages/Level_0__83.md",
+    pageid: 83,
+    revid: 1397338,
+    survivalClass: {
+      code: "Class Custom",
+      label: "Custom (Unstable / Devoid of Entities)",
+      safety: "Unstable",
+      security: "Unstable",
+      entityCount: "Devoid of Entities",
+      colorHex: "#75623e",
+    },
+    mmoInstanceMode: "solo_isolated",
+    environment: {
+      ceilingHeight: 3.1,
+      fogColor: 0x3b341c,
+      fogDensity: 0.048,
+      ambientColor: 0xfff0b5,
+      ambientIntensity: 0.42,
+      lightColor: 0xffeb99,
+      lightIntensity: 1.55,
+      lightFlicker: true,
+      blackoutIntervalSec: 0,
+      blackoutDurationSec: 0,
+      hueShiftColors: null,
+      temperatureC: 22.0,
+      humidity: "Damp carpet saturation (unsafe fluid)",
+      description:
+        "時代遅れの小売店舗裏に似た非ユークリッド空間。矢印と垂直線の黄ばんだ壁紙、湿った摩耗カーペット、点在するコンセント、強烈な蛍光灯のハム音に満ちている。",
+    },
+    textures: {
+      wall: {
+        wikiFile: "File:Wallpaper.png",
+        datasetPath: "dataset/images/Wallpaper__7a9c233d8d.png",
+        bundledPath: "./assets/textures/Wallpaper__7a9c233d8d.png",
+        proceduralStyle: "level0_wallpaper",
+      },
+      floor: {
+        wikiFile: "File:Thebackrooms.jpg",
+        datasetPath: "dataset/images/Thebackrooms__229a8508a0.jpg",
+        bundledPath: "./assets/textures/Thebackrooms__229a8508a0.jpg",
+        proceduralStyle: "level0_carpet",
+      },
+      ceiling: {
+        wikiFile: "File:Level 0 alt.png",
+        datasetPath: "dataset/images/Level_0_alt__cb2859972e.png",
+        bundledPath: "./assets/textures/Level_0_alt__cb2859972e.png",
+        proceduralStyle: "level0_ceiling",
+      },
+      door: {
+        wikiFile: "File:Manila Room.png",
+        datasetPath: "dataset/images/Manila_Room__8c1ecbd38f.png",
+        bundledPath: "./assets/textures/Manila_Room__8c1ecbd38f.png",
+        proceduralStyle: "manila_wallpaper",
+      },
+      accent: {
+        wikiFile: "File:Dated level 0 photograph.png",
+        datasetPath: "dataset/images/Dated_level_0_photograph__8b3c00a038.png",
+        bundledPath: "./assets/textures/Dated_level_0_photograph__8b3c00a038.png",
+        proceduralStyle: "level0_wallpaper",
+      },
+    },
+    entities: [
+      {
+        id: "phenomenon_15",
+        name: "Phenomenon 15 (Total Isolation)",
+        behavior: "他探索者・実体は一切出現しない。長時間の孤立による視聴覚幻覚のみが発生する。",
+        wikiRef: "https://backrooms.fandom.com/wiki/Level_0",
+      },
+    ],
+    ambientLogs: [
+      "[LEVEL 0] 蛍光灯のハム音 (60Hz/120Hz) が連続測定されています。",
+      "[SENSOR] カーペットは謎の液体で湿潤。飲用不可。家具が置かれていた凹みを確認。",
+      "[TOPOLOGY] 非ユークリッド位相異常を検出。直進しても元の部屋群に戻るとは限りません。",
+      "[PHENOMENON 15] 生体反応ゼロ。周囲の囁きや人影は孤立性幻覚の可能性が高いです。",
+      "[NAVIGATION] 不安定な壁面 (Nキー) でノークリップ、または遠方探索・Manila Room・階段で脱出可能です。",
+    ],
+  },
+
+  manila_room: {
+    id: "manila_room",
+    name: "The Manila Room",
+    subtitle: "Isolated Spatial Anomaly inside Level 0",
+    wikiTitle: "Level 0",
+    wikiUrl: "https://backrooms.fandom.com/wiki/Level_0#The_Manila_Room",
+    sourcePagePath: "dataset/pages/Level_0__83.md",
+    pageid: 83,
+    revid: 1397338,
+    survivalClass: {
+      code: "Spatial Anomaly",
+      label: "Level 0 Anomaly (Rudimentary Rest Point)",
+      safety: "Safe / Rest",
+      security: "Unstable",
+      entityCount: "Devoid of Entities",
+      colorHex: "#b88a44",
+    },
+    mmoInstanceMode: "solo_isolated",
+    environment: {
+      ceilingHeight: 3.1,
+      fogColor: 0x2c1e12,
+      fogDensity: 0.055,
+      ambientColor: 0xffb366,
+      ambientIntensity: 0.36,
+      lightColor: 0xff9442,
+      lightIntensity: 1.05,
+      lightFlicker: true,
+      blackoutIntervalSec: 45,
+      blackoutDurationSec: 5,
+      hueShiftColors: null,
+      temperatureC: 21.0,
+      humidity: "Damp carpet / dulled senses",
+      description:
+        "Level 0内に出現する孤立空間異常。落ち着いたマニラ紙調壁紙と暗いオレンジ色の単一照明を持ち、壁の奥から微かな囁きが聞こえる。休息によりLevel 1またはLevel 2へ抜ける安定した出口。",
+    },
+    textures: {
+      wall: {
+        wikiFile: "File:Manila Room.png",
+        datasetPath: "dataset/images/Manila_Room__8c1ecbd38f.png",
+        bundledPath: "./assets/textures/Manila_Room__8c1ecbd38f.png",
+        proceduralStyle: "manila_wallpaper",
+      },
+      floor: {
+        wikiFile: "File:Thebackrooms.jpg",
+        datasetPath: "dataset/images/Thebackrooms__229a8508a0.jpg",
+        bundledPath: "./assets/textures/Thebackrooms__229a8508a0.jpg",
+        proceduralStyle: "level0_carpet",
+      },
+      ceiling: {
+        wikiFile: "File:Level 0 alt.png",
+        datasetPath: "dataset/images/Level_0_alt__cb2859972e.png",
+        bundledPath: "./assets/textures/Level_0_alt__cb2859972e.png",
+        proceduralStyle: "level0_ceiling",
+      },
+      door: {
+        wikiFile: "File:Hubdoor.png",
+        datasetPath: "dataset/images/Hubdoor__4a30440d03.png",
+        bundledPath: "./assets/textures/Hubdoor__4a30440d03.png",
+        proceduralStyle: "hub_door",
+      },
+      accent: {
+        wikiFile: "File:Manila Room.png",
+        datasetPath: "dataset/images/Manila_Room__8c1ecbd38f.png",
+        bundledPath: "./assets/textures/Manila_Room__8c1ecbd38f.png",
+        proceduralStyle: "manila_wallpaper",
+      },
+    },
+    entities: [
+      {
+        id: "phenomenon_12",
+        name: "Phenomenon 12 / Wall Whispering",
+        behavior: "壁の背後から微かな囁き声と時折のブラックアウトが発生する。",
+        wikiRef: "https://backrooms.fandom.com/wiki/Level_0#The_Manila_Room",
+      },
+    ],
+    ambientLogs: [
+      "[MANILA ROOM] マニラ模様の壁紙が周囲の雑音を和らげ、感覚を鈍麻させています。",
+      "[LIGHTING] 単一のオレンジ色照明を確認。Phenomenon 12 による停電に注意。",
+      "[AUDIO] 壁の向こうから微かな囁きが聞こえます……。",
+      "[EXIT] 中央の休息アンカーにインタラクト (E) して Level 1 または Level 2 へ遷移できます。",
+    ],
+  },
+
+  level_1: {
+    id: "level_1",
+    name: 'Level 1: "The Parking Lot"',
+    subtitle: "Concrete Parking Lots & Warehouses (2,000 Floors)",
+    wikiTitle: "Level 1",
+    wikiUrl: "https://backrooms.fandom.com/wiki/Level_1",
+    sourcePagePath: "dataset/pages/Level_1__90.md",
+    pageid: 90,
+    revid: 1390128,
+    survivalClass: {
+      code: "Class 2",
+      label: "Safe / Stable / Moderate Entity Count",
+      safety: "Safe",
+      security: "Stable",
+      entityCount: "Moderate Entity Count",
+      colorHex: "#7b8085",
+    },
+    mmoInstanceMode: "shared_shard",
+    environment: {
+      ceilingHeight: 4.5,
+      fogColor: 0x26292d,
+      fogDensity: 0.036,
+      ambientColor: 0xcfd6de,
+      ambientIntensity: 0.34,
+      lightColor: 0xdbe5ee,
+      lightIntensity: 1.35,
+      lightFlicker: true,
+      blackoutIntervalSec: 34,
+      blackoutDurationSec: 9,
+      hueShiftColors: null,
+      temperatureC: 27.0,
+      humidity: "High humidity fog from Hydrolitis puddles (27-50C)",
+      description:
+        "2,000階層に及ぶ巨大コンクリート駐車場と倉庫の融合空間。無銘の故障車、階数を示す柱、Hydrolitis水たまり、給電可能な壁コンセント、そして突発的な停電（Blackout）が発生する。",
+    },
+    textures: {
+      wall: {
+        wikiFile: "File:Level 1.jpg",
+        datasetPath: "dataset/images/Level_1__e8e28d1950.jpg",
+        bundledPath: "./assets/textures/Level_1__e8e28d1950.jpg",
+        proceduralStyle: "level1_concrete",
+      },
+      floor: {
+        wikiFile: "File:SolusLevel1.jpg",
+        datasetPath: "dataset/images/SolusLevel1__fda38a012a.jpg",
+        bundledPath: "./assets/textures/SolusLevel1__fda38a012a.jpg",
+        proceduralStyle: "level1_asphalt",
+      },
+      ceiling: {
+        wikiFile: "File:Level1Warehouse.jpeg",
+        datasetPath: "dataset/images/Level1Warehouse__9a55eb1a79.jpeg",
+        bundledPath: "./assets/textures/Level1Warehouse__9a55eb1a79.jpeg",
+        proceduralStyle: "level1_concrete",
+      },
+      door: {
+        wikiFile: "File:Level 1 Hallway.jpg",
+        datasetPath: "dataset/images/Level_1_Hallway__724a41cdd4.jpg",
+        bundledPath: "./assets/textures/Level_1_Hallway__724a41cdd4.jpg",
+        proceduralStyle: "hub_door",
+      },
+      accent: {
+        wikiFile: "File:False Puddle.jpg",
+        datasetPath: "dataset/images/False_Puddle__54b6916afa.jpg",
+        bundledPath: "./assets/textures/False_Puddle__54b6916afa.jpg",
+        proceduralStyle: "level1_asphalt",
+      },
+    },
+    entities: [
+      {
+        id: "smilers",
+        name: "Entity 3: Smilers",
+        behavior: "停電（Blackout）発生時のみ暗闇から積極狩猟を行う。懐中電灯の維持が推奨される。",
+        wikiRef: "https://backrooms.fandom.com/wiki/Level_1",
+      },
+      {
+        id: "hounds",
+        name: "Entity 8: Hounds",
+        behavior: "Level 1では比較的臆病で、視線と威嚇で追い払うことが可能。",
+        wikiRef: "https://backrooms.fandom.com/wiki/Level_1",
+      },
+      {
+        id: "false_puddles",
+        name: "False Puddles / Hydrolitis Plague",
+        behavior: "床の水たまりは感染症源または捕食性擬態ピットのため接触・飲用厳禁。",
+        wikiRef: "https://backrooms.fandom.com/wiki/Level_1",
+      },
+    ],
+    ambientLogs: [
+      "[LEVEL 1] 天井高4.5mのコンクリート駐車場区画。Hydrolitis水たまり由来の霧が発生中。",
+      "[HAZARD] 突発ブラックアウトが間欠発生します。停電時は F キーで懐中電灯を点灯してください。",
+      "[COLONY] M.E.G. Almander / Backroom Colonists Base Blink 管轄エリアの残響を検出。",
+      "[SECRET] The Hub への確定ルート：分岐区画で Door B に接触後、Door A を起動してください。",
+      "[ITEM] 周辺区画に Object 2 (Level Key) がドロップしている可能性があります。",
+    ],
+  },
+
+  the_hub: {
+    id: "the_hub",
+    name: "The Hub",
+    subtitle: "Subterranean Nexus of Metallic Level Doors",
+    wikiTitle: "The Hub",
+    wikiUrl: "https://backrooms.fandom.com/wiki/The_Hub",
+    sourcePagePath: "dataset/pages/The_Hub__61845.md",
+    pageid: 61845,
+    revid: 1306303,
+    survivalClass: {
+      code: "Class Nexus",
+      label: "Nexus (0/5 Guaranteed Exit / Everchanging)",
+      safety: "Safe / Nexus",
+      security: "Shifting Geometry",
+      entityCount: "Diverse (No Smilers)",
+      colorHex: "#daa520",
+    },
+    mmoInstanceMode: "shared_shard",
+    environment: {
+      ceilingHeight: 4.8,
+      fogColor: 0x261d14,
+      fogDensity: 0.028,
+      ambientColor: 0xffbe73,
+      ambientIntensity: 0.42,
+      lightColor: 0xffa63b,
+      lightIntensity: 1.65,
+      lightFlicker: false,
+      blackoutIntervalSec: 0,
+      blackoutDurationSec: 0,
+      hueShiftColors: [0xffa63b, 0xff5a2b, 0xff8c24, 0x9b59b6, 0x39b87a],
+      temperatureC: -3.8,
+      humidity: "Below freezing (-3.8C), self-cleaning ground",
+      description:
+        "各階層への金属製扉が点在する巨大な地下コンクリート・レンガトンネル網。中央のアスファルト道路、天井のAlmond Water配管、色相変化するオレンジ灯、氷点下(-3.8℃)の巨大換気ファンを備える。",
+    },
+    textures: {
+      wall: {
+        wikiFile: "File:Tunnel.webp",
+        datasetPath: "dataset/images/Tunnel__d36fe2f1d2.webp",
+        bundledPath: "./assets/textures/Tunnel__d36fe2f1d2.webp",
+        proceduralStyle: "hub_tunnel",
+      },
+      floor: {
+        wikiFile: "File:Now THIS is the hub.png",
+        datasetPath: "dataset/images/Now_THIS_is_the_hub__08bb5ae4c3.png",
+        bundledPath: "./assets/textures/Now_THIS_is_the_hub__08bb5ae4c3.png",
+        proceduralStyle: "hub_road",
+      },
+      ceiling: {
+        wikiFile: "File:Tunnel.webp",
+        datasetPath: "dataset/images/Tunnel__d36fe2f1d2.webp",
+        bundledPath: "./assets/textures/Tunnel__d36fe2f1d2.webp",
+        proceduralStyle: "hub_tunnel",
+      },
+      door: {
+        wikiFile: "File:Hubdoor.png",
+        datasetPath: "dataset/images/Hubdoor__4a30440d03.png",
+        bundledPath: "./assets/textures/Hubdoor__4a30440d03.png",
+        proceduralStyle: "hub_door",
+      },
+      accent: {
+        wikiFile: "File:A Stash of Level Keys.jpg",
+        datasetPath: "dataset/images/A_Stash_of_Level_Keys__eac6b3da7d.jpg",
+        bundledPath: "./assets/textures/A_Stash_of_Level_Keys__eac6b3da7d.jpg",
+        proceduralStyle: "hub_door",
+      },
+    },
+    entities: [
+      {
+        id: "skin_stealers",
+        name: "Entity 10: Skin-Stealers / Hounds / Deathmoths",
+        behavior: "広大なため遭遇は稀。Smilers などの闇属性エンティティは特異的に不在。",
+        wikiRef: "https://backrooms.fandom.com/wiki/The_Hub",
+      },
+    ],
+    ambientLogs: [
+      "[THE HUB] 気温 -3.8℃ (25°F)。換気ファンの低周波と微かな漂白剤臭を感知。",
+      "[LIGHTING] トンネル照明がオレンジ〜赤（稀に紫・緑）へ色相変化を起こしています。",
+      "[ACCESS] 各Level Doorは階層カラーと紋章を帯びており、Object 2 (Level Key) で解錠できます。",
+      "[SURFACE] アスファルト床は異常な自浄作用を持ち、液体は数秒で吸収されます。",
+    ],
+  },
+
+  level_2: {
+    id: "level_2",
+    name: 'Level 2: "Pipe Dreams"',
+    subtitle: "Interconnected Utility Tunnels & Rusting Pipes",
+    wikiTitle: "Level 2",
+    wikiUrl: "https://backrooms.fandom.com/wiki/Level_2",
+    sourcePagePath: "dataset/pages/Level_2__120.md",
+    pageid: 120,
+    revid: 1339266,
+    survivalClass: {
+      code: "Class 2",
+      label: "Unsafe / Stable / Low Entity Count",
+      safety: "Unsafe",
+      security: "Stable",
+      entityCount: "Low Entity Count",
+      colorHex: "#8c4a27",
+    },
+    mmoInstanceMode: "shared_shard",
+    environment: {
+      ceilingHeight: 3.3,
+      fogColor: 0x1b1512,
+      fogDensity: 0.058,
+      ambientColor: 0xb89c86,
+      ambientIntensity: 0.25,
+      lightColor: 0xffb878,
+      lightIntensity: 1.1,
+      lightFlicker: true,
+      blackoutIntervalSec: 0,
+      blackoutDurationSec: 0,
+      hueShiftColors: null,
+      temperatureC: 48.0,
+      humidity: "60-100C near steam pipes; cold vents elsewhere",
+      description:
+        "無限に続くコンクリート製保守トンネルと錆びた蒸気配管網。無線通信は完全に途絶し、蒸気管付近は60〜100℃に達する。Clockwork Theoryによる幻覚的レイアウト変動が報告されている。",
+    },
+    textures: {
+      wall: {
+        wikiFile: "File:Rusty texturelevel2.png",
+        datasetPath: "dataset/images/Rusty_texturelevel2__5c83402352.png",
+        bundledPath: "./assets/textures/Rusty_texturelevel2__5c83402352.png",
+        proceduralStyle: "level2_rust_pipe",
+      },
+      floor: {
+        wikiFile: "File:Cleanlevel2.jpg",
+        datasetPath: "dataset/images/Cleanlevel2__6645008516.jpg",
+        bundledPath: "./assets/textures/Cleanlevel2__6645008516.jpg",
+        proceduralStyle: "level2_floor",
+      },
+      ceiling: {
+        wikiFile: "File:Level2main.png",
+        datasetPath: "dataset/images/Level2main__964773df02.png",
+        bundledPath: "./assets/textures/Level2main__964773df02.png",
+        proceduralStyle: "level2_rust_pipe",
+      },
+      door: {
+        wikiFile: "File:Spoopy level2.png",
+        datasetPath: "dataset/images/Spoopy_level2__d8277fb786.png",
+        bundledPath: "./assets/textures/Spoopy_level2__d8277fb786.png",
+        proceduralStyle: "hub_door",
+      },
+      accent: {
+        wikiFile: "File:Level2main.png",
+        datasetPath: "dataset/images/Level2main__964773df02.png",
+        bundledPath: "./assets/textures/Level2main__964773df02.png",
+        proceduralStyle: "level2_rust_pipe",
+      },
+    },
+    entities: [
+      {
+        id: "level2_entities",
+        name: "Clumps / Hounds / Smilers / Biological Pipeline",
+        behavior: "狭隘な保守通路の暗所に潜む。配管内の錆混じり液体は細菌・病原体のため飲用厳禁。",
+        wikiRef: "https://backrooms.fandom.com/wiki/Level_2",
+      },
+    ],
+    ambientLogs: [
+      "[LEVEL 2] 錆びた配管と高熱蒸気音。ラジオ・無線機器は完全に沈黙しています。",
+      "[THERMAL] 一部の蒸気管付近で高温 (60-100℃) を記録。換気口付近は急激に低温化します。",
+      "[WARNING] パイプ内の水や正体不明の配管分岐 (Biological Pipeline) には近づかないでください。",
+      "[EXIT] 非常口 (Fire Exit) から Level 1 へ帰還、または不安定配管壁からノークリップ可能です。",
+    ],
+  },
+});
+
+export function listLevelIds() {
+  return Object.keys(LEVELS);
+}
+
+export function getLevelData(levelId) {
+  return LEVELS[levelId] || LEVELS.level_0;
+}
+
+export function getAttributionText(levelId = "level_0") {
+  const lvl = getLevelData(levelId);
+  return `${lvl.wikiTitle} (${lvl.wikiUrl}) | ${LICENSE_INFO.wikiName} (${LICENSE_INFO.name}: ${LICENSE_INFO.url})`;
+}

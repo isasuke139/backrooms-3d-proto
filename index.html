@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Backrooms Wiki 3D FPS Prototype (CC-BY-SA-3.0)</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.169.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="viewport"></div>
+  <div id="glitch-flash" class="hidden"></div>
+  <div id="blackout-banner" class="hidden">BLACKOUT DETECTED — PRESS [F] FOR FLASHLIGHT</div>
+
+  <!-- Start / Menu Overlay -->
+  <div id="start-overlay">
+    <div class="panel">
+      <div class="eyebrow">THE BACKROOMS WIKI — GODOT 4.3 MMO PROTOTYPE</div>
+      <h1>LEVEL 0 // INFINITE EXPLORATION</h1>
+      <p class="subtitle">
+        Fandom版「The Backrooms Wiki」一次記事・紐付け画像に準拠した決定論的チャンク無限迷宮 &amp; ノークリップ遷移プロトタイプ
+      </p>
+
+      <div class="form-grid">
+        <label>
+          ワールドシード (Deterministic Seed)
+          <input id="seed-input" type="text" value="1999" />
+        </label>
+        <label>
+          開始階層 (Starting Level)
+          <select id="level-select">
+            <option value="level_0">Level 0: "The Lobby"</option>
+            <option value="manila_room">The Manila Room (Anomaly)</option>
+            <option value="level_1">Level 1: "The Parking Lot"</option>
+            <option value="the_hub">The Hub (Nexus)</option>
+            <option value="level_2">Level 2: "Pipe Dreams"</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="controls-box">
+        <div><strong>WASD</strong>: 移動 / <strong>Shift</strong>: ダッシュ</div>
+        <div><strong>マウス (Pointer Lock)</strong> または <strong>←/→</strong>: 視点回転</div>
+        <div><strong>F</strong>: 懐中電灯 / <strong>E</strong>: 扉・階段・鍵</div>
+        <div><strong>N</strong>: 不安定境界ノークリップ / <strong>M</strong>: 消音 / <strong>H</strong>: HUD</div>
+      </div>
+
+      <div class="actions">
+        <button id="btn-enter" class="btn-primary">探索開始 (Enter The Backrooms)</button>
+        <button id="btn-wiki-modal" class="btn-secondary">Wiki出典・階層設定一覧</button>
+      </div>
+
+      <footer class="license-footer">
+        Source: <a href="https://backrooms.fandom.com/wiki/Backrooms_Wiki" target="_blank" rel="noopener">The Backrooms Wiki (Fandom)</a>
+        | License: <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC-BY-SA-3.0</a>
+      </footer>
+    </div>
+  </div>
+
+  <!-- In-Game HUD -->
+  <div id="hud">
+    <div class="hud-top-left">
+      <div class="class-header">
+        <span id="hud-class-badge" class="class-badge">Class Custom</span>
+        <div>
+          <div id="hud-level-name" class="level-name">Level 0: "The Lobby"</div>
+          <div id="hud-level-sub" class="level-sub">Ceaseless Mono-Yellow Retail Backrooms</div>
+        </div>
+      </div>
+      <div id="hud-class-label" class="class-detail">Unstable / Devoid of Entities</div>
+      <div class="telemetry-grid">
+        <span>座標:</span><strong id="hud-coords">X:1.5m Z:1.5m</strong>
+        <span>チャンク:</span><strong id="hud-chunk">(0, 0)</strong>
+        <span>アクティブ:</span><strong id="hud-active-chunks">25</strong>
+        <span>シード:</span><strong id="hud-seed">1999</strong>
+        <span>テクスチャ:</span><strong id="hud-tex-status">Canvasプロシージャル</strong>
+        <span>Level Key:</span><strong id="hud-key-status" class="badge-muted">未所持</strong>
+        <span>懐中電灯:</span><strong id="hud-flashlight">OFF</strong>
+        <span>MMOモード:</span><strong id="hud-mmo-mode">Solo Isolated</strong>
+      </div>
+    </div>
+
+    <div class="hud-top-right">
+      <div class="compass-wrap">
+        <div id="compass-needle" class="compass-needle">N</div>
+      </div>
+      <div class="logs-title">ENVIRONMENT &amp; M.E.G. LOG</div>
+      <div id="hud-logs" class="logs-box"></div>
+    </div>
+
+    <div id="crosshair">+</div>
+    <div id="hud-prompt" class="hud-prompt">クリックでマウス視点復帰 / WASD移動 / E調べる / Nノークリップ</div>
+
+    <div id="hud-attribution" class="hud-attribution">
+      出典: <a href="https://backrooms.fandom.com/wiki/Level_0" target="_blank" rel="noopener">Level 0</a> (The Backrooms Wiki) | License: <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC-BY-SA-3.0</a>
+    </div>
+  </div>
+
+  <!-- Wiki Lore Modal -->
+  <div id="wiki-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Backrooms Wiki 一次準拠設定 &amp; CC-BY-SA-3.0 帰属情報</h2>
+        <button id="btn-close-modal" class="btn-secondary">閉じる</button>
+      </div>
+      <div id="wiki-modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
