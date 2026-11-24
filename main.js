@@ -1199,6 +1199,10 @@ const state = {
   tvTimer: 0,
   l2TremorTimer: 0,
   l2TremorActiveTimer: 0,
+  l0ShiftTimer: 0,
+  l0ShiftDistAccum: 0,
+  l0ShiftLogCooldown: 0,
+  l0LastChunkKey: "",
   hudVisible: true,
   camcorderVisible: true,
   logs: [],
@@ -1535,6 +1539,21 @@ function buildChunkGroup(chunkData) {
         rz: prop.rotY || 0,
         sx: prop.w || 0.9,
         sy: prop.d || 0.8,
+      });
+    } else if (prop.kind === "LEVEL0_WING_WALL") {
+      const wh = prop.height ?? h;
+      const wingMesh = new THREE.Mesh(getSharedBoxGeo(prop.w, wh, prop.d, 3.0), mats.wall);
+      wingMesh.position.set(prop.x, wh * 0.5, prop.z);
+      wingMesh.castShadow = true;
+      wingMesh.receiveShadow = true;
+      group.add(wingMesh);
+      batch.add(SHARED_GEOS.box, s.baseboardMat, {
+        x: prop.x,
+        y: 0.065,
+        z: prop.z,
+        sx: prop.w + 0.025,
+        sy: 0.13,
+        sz: prop.d + 0.025,
       });
     } else if (prop.kind === "REBAR_CLUSTER") {
       const cosR = Math.cos(prop.rotY || 0);
@@ -2148,6 +2167,15 @@ const chunkManager = new ChunkManager({
       chunkMeshes.delete(chunkData.key);
     }
   },
+  onChunkReload: (chunkData) => {
+    const oldGroup = chunkMeshes.get(chunkData.key);
+    if (oldGroup) {
+      disposeChunkGroup(oldGroup);
+      chunkMeshes.delete(chunkData.key);
+    }
+    buildChunkGroup(chunkData);
+    updateChunkVisibility();
+  },
 });
 
 // ---------------------------------------------------------------------------
@@ -2207,6 +2235,10 @@ function applyLevelEnvironment(levelId) {
   state.manilaWarnStep = 0;
   state.l2TremorTimer = 0;
   state.l2TremorActiveTimer = 0;
+  state.l0ShiftTimer = 0;
+  state.l0ShiftDistAccum = 0;
+  state.l0ShiftLogCooldown = 0;
+  state.l0LastChunkKey = "";
 
   for (const line of levelData.ambientLogs) {
     addLog(line);
@@ -2480,6 +2512,9 @@ ui.btnCloseModal.addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 let lastTime = performance.now();
 let driftCheckAccum = 0;
+const shiftFrustum = new THREE.Frustum();
+const shiftProjMatrix = new THREE.Matrix4();
+const shiftProbeVec = new THREE.Vector3();
 
 function updatePointLightPool(elapsedSec, currentLightHex, levelData) {
   const env = levelData.environment;
@@ -2705,6 +2740,9 @@ function animate(now) {
       vz += (-cosY * nf - sinY * ns) * speed * dt;
     }
 
+    const prevPlayerX = state.player.x;
+    const prevPlayerZ = state.player.z;
+
     if (moving || vx !== 0 || vz !== 0) {
       const resolved = chunkManager.resolveCollision(
         state.player.x + vx,
@@ -2719,6 +2757,63 @@ function animate(now) {
       if (streamRes.loadedKeys.length > 0 || streamRes.unloadedKeys.length > 0) {
         updateChunkVisibility();
         updateHudTelemetry();
+      }
+    }
+
+    if (state.currentLevelId === "level_0") {
+      state.l0ShiftTimer += dt;
+      state.l0ShiftDistAccum += Math.hypot(state.player.x - prevPlayerX, state.player.z - prevPlayerZ);
+      if (state.l0ShiftLogCooldown > 0) {
+        state.l0ShiftLogCooldown = Math.max(0, state.l0ShiftLogCooldown - dt);
+      }
+      const curCoord = chunkManager.worldToChunk(state.player.x, state.player.z);
+      const curKey = `${curCoord.cx}:${curCoord.cz}`;
+      const crossedChunk = state.l0LastChunkKey !== "" && curKey !== state.l0LastChunkKey;
+      state.l0LastChunkKey = curKey;
+
+      if (state.l0ShiftTimer >= 3.5 && (state.l0ShiftDistAccum >= 4.5 || crossedChunk)) {
+        camera.position.set(
+          state.player.x,
+          state.player.feetY + state.player.eyeHeight + state.player.landDip + state.player.hazardDip,
+          state.player.z
+        );
+        camera.rotation.order = "YXZ";
+        camera.rotation.y = state.player.yaw;
+        camera.rotation.x = state.player.pitch;
+        camera.updateMatrixWorld();
+        shiftProjMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        shiftFrustum.setFromProjectionMatrix(shiftProjMatrix);
+
+        const forwardX = -Math.sin(state.player.yaw);
+        const forwardZ = -Math.cos(state.player.yaw);
+        const isPointVisible = (wx, wz) => {
+          for (const py of [0.2, 1.6, 3.0]) {
+            shiftProbeVec.set(wx, py, wz);
+            if (shiftFrustum.containsPoint(shiftProbeVec)) return true;
+          }
+          return false;
+        };
+
+        const shiftRes = chunkManager.tryNonEuclideanShift(
+          state.player.x,
+          state.player.z,
+          forwardX,
+          forwardZ,
+          { isPointVisible }
+        );
+        if (shiftRes.shifted) {
+          state.l0ShiftTimer = 0;
+          state.l0ShiftDistAccum = 0;
+          audio.playSpatialShiftHum();
+          if (state.l0ShiftLogCooldown <= 0) {
+            state.l0ShiftLogCooldown = 22.0;
+            addLog(
+              shiftRes.mode === "rear_chunk"
+                ? "[NON-EUCLIDEAN] 背後で通過済みの空間区画が別構造へと組み替わった気配がする……"
+                : "[NON-EUCLIDEAN] 視界外の背後で壁と角の配置が静かに変化した気配がする……"
+            );
+          }
+        }
       }
     }
 

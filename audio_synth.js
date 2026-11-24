@@ -467,4 +467,30 @@ export class BackroomsAudio {
     osc.stop(now + 2.25);
     rumble.stop(now + 2.25);
   }
+
+  playSpatialShiftHum() {
+    if (!this.init() || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(58, now);
+    osc.frequency.linearRampToValueAtTime(62, now + 0.42);
+
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(160, now);
+    bp.frequency.linearRampToValueAtTime(110, now + 0.44);
+    bp.Q.value = 1.8;
+
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.002, now);
+    g.gain.linearRampToValueAtTime(0.075, now + 0.14);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+    osc.connect(bp);
+    bp.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.46);
+  }
 }
