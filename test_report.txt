@@ -1,45 +1,45 @@
 ========================================================================
  BACKROOMS WIKI PIPELINE & 3D PROTOTYPE — AUTOMATED VERIFICATION REPORT
 ========================================================================
-Generated At : 2026-11-24T05:52:32.641Z
+Generated At : 2026-11-24T06:09:48.610Z
 Node Version : v22.23.4
 License      : CC-BY-SA-3.0 (https://creativecommons.org/licenses/by-sa/3.0/)
 Wiki Source  : https://backrooms.fandom.com/wiki/Backrooms_Wiki
 Summary      : TOTAL=17 | PASSED=17 | FAILED=0
 ------------------------------------------------------------------------
-[PASS] (Dataset) manifest.json & index_linked.json parse cleanly (110ms)
+[PASS] (Dataset) manifest.json & index_linked.json parse cleanly (155ms)
        pages=1721, downloaded_images=7753
-[PASS] (Dataset) Core pages exist with valid markdown & linked images (10ms)
+[PASS] (Dataset) Core pages exist with valid markdown & linked images (11ms)
        Level 0(imgs=9/9), Level 1(imgs=11/11), The Hub(imgs=5/5), Level 2(imgs=15/16), Object 1(imgs=1/1), Object 2(imgs=1/1)
-[PASS] (Dataset) All pages[].markdown_path and downloaded images[].local_path exist on disk (232ms)
+[PASS] (Dataset) All pages[].markdown_path and downloaded images[].local_path exist on disk (335ms)
        verified_md=1721, verified_unique_images=7753 (refs=10568)
-[PASS] (Dataset) All src/lore_data.js datasetPath and bundledPath textures exist (2ms)
+[PASS] (Dataset) All src/lore_data.js datasetPath and bundledPath textures exist (1ms)
        checked_texture_slots=25
 [PASS] (Dataset) All regenerated PBR normalPath and roughnessPath maps exist on disk (1ms)
        verified_normal=20, verified_roughness=20, aux_pbr=12
-[PASS] (License) CC-BY-SA-3.0 & backrooms.fandom.com attribution across all deliverables (131ms)
+[PASS] (License) CC-BY-SA-3.0 & backrooms.fandom.com attribution across all deliverables (56ms)
        verified_files=10
-[PASS] (WorldGen) Chunk generation is byte-identical across repeated calls & distinct across seeds/coords (94ms)
+[PASS] (WorldGen) Chunk generation is byte-identical across repeated calls & distinct across seeds/coords (78ms)
        tested_levels=5, seedA=2621724689, seedB=3555416481
-[PASS] (WorldGen) Spawn (1.5, 1.5) is collision-free & cross-chunk borders match symmetrically (86ms)
+[PASS] (WorldGen) Spawn (1.5, 1.5) is collision-free & cross-chunk borders match symmetrically (43ms)
        all_5_levels_spawn_clear_and_seams_symmetric
-[PASS] (Collision) Circle-vs-AABB blocks wall penetration and slides smoothly (22ms)
+[PASS] (Collision) Circle-vs-AABB blocks wall penetration and slides smoothly (27ms)
        wall=[9..12, 9..12], clamped_x=8.580, slide_z=11.100
-[PASS] (Collision) Pillars, Level 2 pilasters, Hub walls & jump-over barrier height clearance work properly (34ms)
+[PASS] (Collision) Pillars, Level 2 pilasters, Hub walls & jump-over barrier height clearance work properly (28ms)
        l0_l1_pillars_blocked, barrier_jump_cleared, l2_pilaster_colliders_ok, hub_wall_sealed
 [PASS] (Transitions) Deterministic Noclip, Distance Drift, Manila, Hub Sequence & Level Key gates (2ms)
        l0_noclip=level_1, manila_exit=level_1, hub_gated_verified
-[PASS] (ChunkEviction) ChunkManager evicts distant chunks beyond unloadRadius and clears on reset() (98ms)
+[PASS] (ChunkEviction) ChunkManager evicts distant chunks beyond unloadRadius and clears on reset() (120ms)
        loaded=50, unloaded=50, active_after_reset=0
-[PASS] (Architecture) All 5 levels match Wiki lore geometry, lights, closed Manila room & concrete Level 2 (9ms)
+[PASS] (Architecture) All 5 levels match Wiki lore geometry, lights, closed Manila room & concrete Level 2 (8ms)
        ceilings=2.75/3/3.1/4.6/6.4m, wiki_lore_and_bugs_verified
-[PASS] (Level0Maze) Level 0 generates a high-density non-grid maze with corners, dead-ends, wing walls & full seam connectivity (50ms)
-       density=0.502, corners=151, deadEnds=25, wingWalls=31
-[PASS] (NonEuclidean) Level 0 non-Euclidean shift mutates only behind player gaze, preserves connectivity, and leaves other levels unchanged (81ms)
-       local_changed=2, rear_epoch=1, forward_guarded, l1_ignored
-[PASS] (Syntax) Node --check passes on all src/*.js & test_backrooms.js, py_compile passes on scraper (544ms)
+[PASS] (Level0Maze) Level 0 generates a dense 12x12 thin-wall labyrinth with murky fog, corners, dead-ends & seamless connectivity (89ms)
+       walls=1322, corners=886, deadEnds=149, fog=0.072
+[PASS] (NonEuclidean) Non-Euclidean shift is disabled by default in runtime & dormant rear_chunk API stays safe (48ms)
+       default_off_verified, dormant_rear_epoch=1, seams_preserved
+[PASS] (Syntax) Node --check passes on all src/*.js & test_backrooms.js, py_compile passes on scraper (649ms)
        syntax_ok=6 JS + 1 Python
-[PASS] (Deliverables) All required deliverable files exist and are non-empty (0ms)
+[PASS] (Deliverables) All required deliverable files exist and are non-empty (1ms)
        deliverables_verified=13
 ========================================================================
 Dataset Counts: pages=1721/1721, images_downloaded=7753, images_failed=0

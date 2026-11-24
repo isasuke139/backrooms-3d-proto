@@ -37,6 +37,7 @@ const CROUCH_SPEED = 2.7;
 const JUMP_VELOCITY = 5.6;
 const GRAVITY = 15.5;
 const POINT_LIGHT_POOL_SIZE = 6;
+export const ENABLE_L0_NON_EUCLIDEAN_SHIFT = false;
 
 // ---------------------------------------------------------------------------
 // DOM References
@@ -228,6 +229,15 @@ function getSharedWorldPlaneGeo(w, d, tileSize = 2.4) {
   return geo;
 }
 
+const SHARED_ARCH_CACHE = new Map();
+function getSharedArchedDividerGeo(w, h, d) {
+  const key = `${w.toFixed(2)}:${h.toFixed(2)}:${d.toFixed(2)}`;
+  if (SHARED_ARCH_CACHE.has(key)) return SHARED_ARCH_CACHE.get(key);
+  const geo = markSharedGeo(createArchedDividerGeometry(w, h, d));
+  SHARED_ARCH_CACHE.set(key, geo);
+  return geo;
+}
+
 const SHARED_PIPE_CACHE = new Map();
 function getSharedPipeGeometry(radius, length, radialSegs = 12) {
   const key = `${radius.toFixed(3)}:${length.toFixed(2)}:${radialSegs}`;
@@ -246,7 +256,7 @@ function getSharedPipeGeometry(radius, length, radialSegs = 12) {
 
 /**
  * Collects repeated per-chunk geometries and flushes one InstancedMesh per
- * (geometry, material, receiveShadow) bucket to dramatically slash draw calls.
+ * (geometry, material, receiveShadow, castShadow) bucket to dramatically slash draw calls.
  */
 class ChunkInstanceBatcher {
   constructor() {
@@ -258,13 +268,13 @@ class ChunkInstanceBatcher {
     this._scale = new THREE.Vector3();
   }
 
-  add(geo, mat, { x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1, receiveShadow = false } = {}) {
+  add(geo, mat, { x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1, receiveShadow = false, castShadow = false } = {}) {
     if (!geo._batchId) geo._batchId = ++GEO_BATCH_SEQ;
     if (!mat._batchId) mat._batchId = ++MAT_BATCH_SEQ;
-    const key = `${geo._batchId}:${mat._batchId}:${receiveShadow ? 1 : 0}`;
+    const key = `${geo._batchId}:${mat._batchId}:${receiveShadow ? 1 : 0}:${castShadow ? 1 : 0}`;
     let bucket = this.buckets.get(key);
     if (!bucket) {
-      bucket = { geo, mat, receiveShadow, matrices: [] };
+      bucket = { geo, mat, receiveShadow, castShadow, matrices: [] };
       this.buckets.set(key, bucket);
     }
     this._pos.set(x, y, z);
@@ -280,8 +290,8 @@ class ChunkInstanceBatcher {
       const count = bucket.matrices.length;
       if (count === 0) continue;
       const inst = new THREE.InstancedMesh(bucket.geo, bucket.mat, count);
-      inst.castShadow = false;
-      inst.receiveShadow = bucket.receiveShadow;
+      inst.castShadow = Boolean(bucket.castShadow);
+      inst.receiveShadow = Boolean(bucket.receiveShadow);
       for (let i = 0; i < count; i += 1) {
         inst.setMatrixAt(i, bucket.matrices[i]);
       }
@@ -968,6 +978,7 @@ class LevelMaterialCache {
           amber: createGlowSpriteTexture("#ffbe55"),
         },
         tintMatCache: new Map(),
+        haloMatCache: new Map(),
       };
     }
 
@@ -1242,7 +1253,7 @@ function disposeChunkGroup(group) {
     if (obj.isMesh && obj.geometry && !obj.userData?.sharedGeo && !obj.geometry.userData?.sharedGeo) {
       obj.geometry.dispose();
     }
-    if (obj.isSprite && obj.material) {
+    if (obj.isSprite && obj.material && !obj.material.userData?.sharedMat) {
       obj.material.dispose();
     }
     if (obj.isLineSegments && obj.geometry) {
@@ -1260,12 +1271,49 @@ function disposeChunkGroup(group) {
 function updateChunkVisibility() {
   const { cx: pcx, cz: pcz } = chunkManager.worldToChunk(state.player.x, state.player.z);
   const maxVisRadius =
-    state.currentLevelId === "level_2" || state.currentLevelId === "manila_room" ? 1 : 2;
+    state.currentLevelId === "level_0" ||
+    state.currentLevelId === "level_2" ||
+    state.currentLevelId === "manila_room"
+      ? 1
+      : 2;
   for (const group of chunkMeshes.values()) {
     const dx = Math.abs(group.userData.cx - pcx);
     const dz = Math.abs(group.userData.cz - pcz);
     group.visible = Math.max(dx, dz) <= maxVisRadius;
   }
+}
+
+function getSharedHaloMat(shared, levelId) {
+  if (!shared.haloMatCache.has(levelId)) {
+    const glowTex =
+      levelId === "manila_room"
+        ? shared.glowTextures.orange
+        : levelId === "the_hub"
+        ? shared.glowTextures.amber
+        : levelId === "level_1"
+        ? shared.glowTextures.cool
+        : levelId === "level_2"
+        ? shared.glowTextures.cold
+        : shared.glowTextures.warm;
+    const opacity =
+      levelId === "the_hub"
+        ? 0.56
+        : levelId === "manila_room"
+        ? 0.48
+        : levelId === "level_2"
+        ? 0.28
+        : 0.24;
+    const mat = new THREE.SpriteMaterial({
+      map: glowTex,
+      transparent: true,
+      opacity,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    mat.userData = { ...(mat.userData || {}), sharedMat: true };
+    shared.haloMatCache.set(levelId, mat);
+  }
+  return shared.haloMatCache.get(levelId);
 }
 
 function getSharedTintMat(shared, hexColor) {
@@ -1380,18 +1428,21 @@ function buildChunkGroup(chunkData) {
     }
 
     if (w.wallStyle === "arched_divider") {
-      const archMesh = new THREE.Mesh(createArchedDividerGeometry(width, w.height, depth), mats.wall);
-      archMesh.position.set(cx, 0, cz);
-      archMesh.castShadow = true;
-      archMesh.receiveShadow = true;
-      group.add(archMesh);
-
-      const trim = new THREE.Mesh(
-        createWorldScaledBoxGeometry(width + 0.02, 0.12, depth + 0.04, 3.0),
-        s.baseboardMat
-      );
-      trim.position.set(cx, 0.06, cz);
-      group.add(trim);
+      batch.add(getSharedArchedDividerGeo(width, w.height, depth), mats.wall, {
+        x: cx,
+        y: 0,
+        z: cz,
+        receiveShadow: true,
+        castShadow: true,
+      });
+      batch.add(SHARED_GEOS.box, s.baseboardMat, {
+        x: cx,
+        y: 0.06,
+        z: cz,
+        sx: width + 0.02,
+        sy: 0.12,
+        sz: depth + 0.04,
+      });
       continue;
     }
 
@@ -1467,13 +1518,22 @@ function buildChunkGroup(chunkData) {
         : mats.wall;
 
     const wallGeo = getSharedBoxGeo(width, w.height, depth, 3.0);
-    const mesh = new THREE.Mesh(wallGeo, mat);
-    mesh.position.set(cx, w.height * 0.5, cz);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    group.add(mesh);
+    batch.add(wallGeo, mat, {
+      x: cx,
+      y: w.height * 0.5,
+      z: cz,
+      receiveShadow: true,
+      castShadow: true,
+    });
 
-    if (chunkData.levelId === "level_0" && (w.wallStyle === "thin_x" || w.wallStyle === "thin_z" || w.wallStyle === "solid")) {
+    if (
+      chunkData.levelId === "level_0" &&
+      (w.wallStyle === "thin_x" ||
+        w.wallStyle === "thin_z" ||
+        w.wallStyle === "solid" ||
+        w.wallStyle === "maze_wall_ew" ||
+        w.wallStyle === "maze_wall_ns")
+    ) {
       batch.add(SHARED_GEOS.box, s.baseboardMat, {
         x: cx,
         y: 0.065,
@@ -1503,7 +1563,7 @@ function buildChunkGroup(chunkData) {
         edges,
         new THREE.LineBasicMaterial({ color: 0xffd166 })
       );
-      line.position.copy(mesh.position);
+      line.position.set(cx, w.height * 0.5, cz);
       group.add(line);
     }
 
@@ -1542,11 +1602,13 @@ function buildChunkGroup(chunkData) {
       });
     } else if (prop.kind === "LEVEL0_WING_WALL") {
       const wh = prop.height ?? h;
-      const wingMesh = new THREE.Mesh(getSharedBoxGeo(prop.w, wh, prop.d, 3.0), mats.wall);
-      wingMesh.position.set(prop.x, wh * 0.5, prop.z);
-      wingMesh.castShadow = true;
-      wingMesh.receiveShadow = true;
-      group.add(wingMesh);
+      batch.add(getSharedBoxGeo(prop.w, wh, prop.d, 3.0), mats.wall, {
+        x: prop.x,
+        y: wh * 0.5,
+        z: prop.z,
+        receiveShadow: true,
+        castShadow: true,
+      });
       batch.add(SHARED_GEOS.box, s.baseboardMat, {
         x: prop.x,
         y: 0.065,
@@ -1658,17 +1720,29 @@ function buildChunkGroup(chunkData) {
         sz: 0.12,
       });
     } else if (prop.kind === "WALL_OUTLET") {
-      const outletGroup = new THREE.Group();
-      outletGroup.position.set(prop.x, 0.45, prop.z);
-      outletGroup.rotation.y = prop.rotY || 0;
-      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.24, 0.03), s.outletMat);
-      outletGroup.add(plate);
+      const ry = prop.rotY || 0;
+      const sinR = Math.sin(ry);
+      const cosR = Math.cos(ry);
+      batch.add(SHARED_GEOS.box, s.outletMat, {
+        x: prop.x,
+        y: 0.45,
+        z: prop.z,
+        ry,
+        sx: 0.16,
+        sy: 0.24,
+        sz: 0.03,
+      });
       for (const sy of [-0.045, 0.045]) {
-        const sock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.045, 0.04), s.socketDarkMat);
-        sock.position.set(0, sy, 0.01);
-        outletGroup.add(sock);
+        batch.add(SHARED_GEOS.box, s.socketDarkMat, {
+          x: prop.x + sinR * 0.01,
+          y: 0.45 + sy,
+          z: prop.z + cosR * 0.01,
+          ry,
+          sx: 0.06,
+          sy: 0.045,
+          sz: 0.04,
+        });
       }
-      group.add(outletGroup);
     } else if (prop.kind === "WHEEL_STOP") {
       batch.add(SHARED_GEOS.wheelStop, s.hazardYellowMat, {
         x: prop.x,
@@ -2090,17 +2164,8 @@ function buildChunkGroup(chunkData) {
     }
   }
 
-  // Per-Level Ceiling Light Fixtures & Halos (Batched meshes + pooled PointLights in scene)
-  const glowTex =
-    chunkData.levelId === "manila_room"
-      ? s.glowTextures.orange
-      : chunkData.levelId === "the_hub"
-      ? s.glowTextures.amber
-      : chunkData.levelId === "level_1"
-      ? s.glowTextures.cool
-      : chunkData.levelId === "level_2"
-      ? s.glowTextures.cold
-      : s.glowTextures.warm;
+  // Per-Level Ceiling Light Fixtures & Halos (Batched meshes + shared halo SpriteMaterial + pooled PointLights)
+  const haloMat = getSharedHaloMat(s, chunkData.levelId);
 
   for (const lt of chunkData.lights) {
     const ry = lt.rotY || 0;
@@ -2127,22 +2192,7 @@ function buildChunkGroup(chunkData) {
       batch.add(SHARED_GEOS.box, mats.ceilingEmissiveMat, { x: lt.x, y: lt.y, z: lt.z, ry, sx: 1.14, sy: 0.05, sz: 0.52 });
     }
 
-    const halo = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        map: glowTex,
-        transparent: true,
-        opacity:
-          chunkData.levelId === "the_hub"
-            ? 0.56
-            : chunkData.levelId === "manila_room"
-            ? 0.48
-            : chunkData.levelId === "level_2"
-            ? 0.28
-            : 0.26,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      })
-    );
+    const halo = new THREE.Sprite(haloMat);
     halo.position.set(lt.x, lt.y - 0.16, lt.z);
     const haloScale = chunkData.levelId === "the_hub" ? 3.4 : chunkData.levelId === "manila_room" ? 2.8 : chunkData.levelId === "level_2" ? 1.6 : 2.1;
     halo.scale.set(haloScale, haloScale, 1);
@@ -2157,8 +2207,9 @@ function buildChunkGroup(chunkData) {
 const chunkManager = new ChunkManager({
   levelId: state.currentLevelId,
   worldSeed: state.worldSeed,
-  loadRadius: 2,
-  unloadRadius: 3,
+  loadRadius: 1,
+  unloadRadius: 2,
+  enableNonEuclidean: ENABLE_L0_NON_EUCLIDEAN_SHIFT,
   onChunkLoad: (chunkData) => buildChunkGroup(chunkData),
   onChunkUnload: (chunkData) => {
     const group = chunkMeshes.get(chunkData.key);
@@ -2177,6 +2228,12 @@ const chunkManager = new ChunkManager({
     updateChunkVisibility();
   },
 });
+
+function configureChunkStreamRadius(levelId) {
+  const tight = levelId === "level_0" || levelId === "level_2" || levelId === "manila_room";
+  chunkManager.loadRadius = tight ? 1 : 2;
+  chunkManager.unloadRadius = tight ? 2 : 3;
+}
 
 // ---------------------------------------------------------------------------
 // Level Switching & HUD Updates
@@ -2198,7 +2255,7 @@ function applyLevelEnvironment(levelId) {
   scene.fog = new THREE.FogExp2(env.fogColor, env.fogDensity);
   scene.environment = getLevelEnvironmentTexture(levelId);
   renderer.toneMappingExposure = env.exposure ?? 1.05;
-  camera.far = levelId === "manila_room" ? 34 : levelId === "level_2" ? 42 : 85;
+  camera.far = levelId === "manila_room" ? 32 : levelId === "level_0" ? 36 : levelId === "level_2" ? 42 : 85;
   camera.updateProjectionMatrix();
 
   ambientLight.color.setHex(env.ambientColor);
@@ -2258,6 +2315,7 @@ function switchLevel(targetLevelId, spawnPos = { x: 1.5, z: 1.5 }, reason = "") 
   keyPickupMeshes = [];
   ventFanRotors = [];
   chunkManager.reset(targetLevelId, state.worldSeed);
+  configureChunkStreamRadius(targetLevelId);
   state.currentLevelId = targetLevelId;
   state.player.x = spawnPos.x;
   state.player.z = spawnPos.z;
@@ -2545,8 +2603,17 @@ function updatePointLightPool(elapsedSec, currentLightHex, levelData) {
       ? 20
       : state.currentLevelId === "level_2"
       ? 14
+      : state.currentLevelId === "level_0"
+      ? 12.5
       : 16;
-  const decay = state.currentLevelId === "the_hub" ? 1.35 : state.currentLevelId === "level_2" ? 1.7 : 1.45;
+  const decay =
+    state.currentLevelId === "the_hub"
+      ? 1.35
+      : state.currentLevelId === "level_2"
+      ? 1.7
+      : state.currentLevelId === "level_0"
+      ? 1.85
+      : 1.45;
   const baseIntensity = env.lightIntensity || 1.3;
 
   for (let i = 0; i < POINT_LIGHT_POOL_SIZE; i += 1) {
@@ -2760,7 +2827,7 @@ function animate(now) {
       }
     }
 
-    if (state.currentLevelId === "level_0") {
+    if (ENABLE_L0_NON_EUCLIDEAN_SHIFT && state.currentLevelId === "level_0") {
       state.l0ShiftTimer += dt;
       state.l0ShiftDistAccum += Math.hypot(state.player.x - prevPlayerX, state.player.z - prevPlayerZ);
       if (state.l0ShiftLogCooldown > 0) {
@@ -2951,6 +3018,7 @@ function animate(now) {
   renderer.render(scene, camera);
 }
 
+configureChunkStreamRadius("level_0");
 applyLevelEnvironment("level_0");
 chunkManager.update(state.player.x, state.player.z);
 updateChunkVisibility();

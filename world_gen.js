@@ -15,6 +15,10 @@ import { getLevelData } from "./lore_data.js";
 export const CHUNK_CELLS = 8;
 export const CELL_SIZE = 3.0;
 export const CHUNK_WORLD_SIZE = CHUNK_CELLS * CELL_SIZE; // 24.0 meters
+export const L0_SUB_CELLS = 12;
+export const L0_SUB_SIZE = CHUNK_WORLD_SIZE / L0_SUB_CELLS; // 2.0 meters
+export const L0_WALL_THICK = 0.24;
+export const L0_SUB_FOR_MACRO = Object.freeze({ 1: 2, 2: 3, 3: 5, 4: 6, 5: 8, 6: 9 });
 
 export const CELL_TYPES = Object.freeze({
   EMPTY: "EMPTY",
@@ -180,256 +184,12 @@ function applyCrossChunkSeams(grid, worldSeed, levelId, cx, cz) {
   }
 }
 
-function makeSolidGrid() {
-  return Array.from({ length: CHUNK_CELLS }, () =>
-    Array.from({ length: CHUNK_CELLS }, () => CELL_TYPES.WALL)
-  );
-}
-
-function cellKey(lx, lz) {
-  return `${lx}:${lz}`;
-}
-
-function isInBounds(lx, lz) {
-  return lx >= 0 && lx < CHUNK_CELLS && lz >= 0 && lz < CHUNK_CELLS;
-}
-
-function isInteriorCell(lx, lz) {
-  return lx >= 1 && lx < CHUNK_CELLS - 1 && lz >= 1 && lz < CHUNK_CELLS - 1;
-}
-
-function isWalkableCell(grid, lx, lz) {
-  return isInBounds(lx, lz) && !SOLID_CELL_TYPES.has(grid[lz][lx]);
-}
-
 const DIRS_4 = [
-  [1, 0],
-  [-1, 0],
-  [0, 1],
-  [0, -1],
+  [1, 0, "E", "W"],
+  [-1, 0, "W", "E"],
+  [0, 1, "S", "N"],
+  [0, -1, "N", "S"],
 ];
-
-function getLevel0BorderOpenings(worldSeed, cx, cz) {
-  const openings = [];
-  for (let i = 0; i < CHUNK_CELLS; i += 1) {
-    if (isBorderOpening(worldSeed, "level_0", cx, cz, cx, cz - 1, i)) openings.push({ lx: i, lz: 0 });
-    if (isBorderOpening(worldSeed, "level_0", cx, cz, cx, cz + 1, i)) openings.push({ lx: i, lz: CHUNK_CELLS - 1 });
-    if (isBorderOpening(worldSeed, "level_0", cx, cz, cx - 1, cz, i)) openings.push({ lx: 0, lz: i });
-    if (isBorderOpening(worldSeed, "level_0", cx, cz, cx + 1, cz, i)) openings.push({ lx: CHUNK_CELLS - 1, lz: i });
-  }
-  return openings;
-}
-
-function wouldCreate2x2Open(grid, lx, lz) {
-  const isOpenAt = (gx, gz) =>
-    (gx === lx && gz === lz) || isWalkableCell(grid, gx, gz);
-  for (let dz = -1; dz <= 0; dz += 1) {
-    for (let dx = -1; dx <= 0; dx += 1) {
-      if (
-        isOpenAt(lx + dx, lz + dz) &&
-        isOpenAt(lx + dx + 1, lz + dz) &&
-        isOpenAt(lx + dx, lz + dz + 1) &&
-        isOpenAt(lx + dx + 1, lz + dz + 1)
-      ) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-function computeWalkableBfs(grid, startX, startZ) {
-  const visited = Array.from({ length: CHUNK_CELLS }, () => Array(CHUNK_CELLS).fill(false));
-  const dist = Array.from({ length: CHUNK_CELLS }, () => Array(CHUNK_CELLS).fill(-1));
-  if (!isWalkableCell(grid, startX, startZ)) {
-    return { visited, dist };
-  }
-  const queue = [[startX, startZ]];
-  visited[startZ][startX] = true;
-  dist[startZ][startX] = 0;
-  for (let head = 0; head < queue.length; head += 1) {
-    const [x, z] = queue[head];
-    const dNext = dist[z][x] + 1;
-    for (const [dx, dz] of DIRS_4) {
-      const nx = x + dx;
-      const nz = z + dz;
-      if (isWalkableCell(grid, nx, nz) && !visited[nz][nx]) {
-        visited[nz][nx] = true;
-        dist[nz][nx] = dNext;
-        queue.push([nx, nz]);
-      }
-    }
-  }
-  return { visited, dist };
-}
-
-function checkLevel0Connectivity(grid, startX, startZ, borderOpenings, interactables = []) {
-  if (!isWalkableCell(grid, startX, startZ)) return false;
-  const { visited } = computeWalkableBfs(grid, startX, startZ);
-
-  for (const op of borderOpenings) {
-    if (!visited[op.lz]?.[op.lx]) return false;
-  }
-  for (const item of interactables) {
-    if (item.lx == null || item.lz == null) continue;
-    const ix = item.lx;
-    const iz = item.lz;
-    if (isWalkableCell(grid, ix, iz)) {
-      if (!visited[iz][ix]) return false;
-    } else {
-      const adjOk = DIRS_4.some(([dx, dz]) => isWalkableCell(grid, ix + dx, iz + dz) && visited[iz + dz][ix + dx]);
-      if (!adjOk) return false;
-    }
-  }
-  return true;
-}
-
-function connectTargetWeighted(grid, startX, startZ, targetX, targetZ, protectedSolid, allowPerimeterKeys) {
-  const { visited } = computeWalkableBfs(grid, startX, startZ);
-  if (visited[targetZ]?.[targetX]) return;
-
-  const INF = 1e9;
-  const bestCost = Array.from({ length: CHUNK_CELLS }, () => Array(CHUNK_CELLS).fill(INF));
-  const prevCell = Array.from({ length: CHUNK_CELLS }, () => Array(CHUNK_CELLS).fill(null));
-  const pq = [];
-
-  for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
-    for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
-      if (visited[lz][lx]) {
-        bestCost[lz][lx] = 0;
-        pq.push({ x: lx, z: lz, cost: 0, dir: -1 });
-      }
-    }
-  }
-  if (pq.length === 0) {
-    grid[targetZ][targetX] = CELL_TYPES.EMPTY;
-    return;
-  }
-
-  while (pq.length > 0) {
-    let minIdx = 0;
-    for (let i = 1; i < pq.length; i += 1) {
-      if (pq[i].cost < pq[minIdx].cost) minIdx = i;
-    }
-    const cur = pq.splice(minIdx, 1)[0];
-    if (cur.cost > bestCost[cur.z][cur.x]) continue;
-    if (cur.x === targetX && cur.z === targetZ) break;
-
-    for (let d = 0; d < DIRS_4.length; d += 1) {
-      const nx = cur.x + DIRS_4[d][0];
-      const nz = cur.z + DIRS_4[d][1];
-      if (!isInBounds(nx, nz)) continue;
-      const nKey = cellKey(nx, nz);
-      if (protectedSolid.has(nKey)) continue;
-
-      const isTarget = nx === targetX && nz === targetZ;
-      if (
-        !isInteriorCell(nx, nz) &&
-        !isTarget &&
-        !allowPerimeterKeys.has(nKey) &&
-        !isWalkableCell(grid, nx, nz)
-      ) {
-        continue;
-      }
-
-      const carveCost = isWalkableCell(grid, nx, nz) ? 0.1 : 10.0;
-      const turnPenalty = cur.dir !== -1 && cur.dir === d ? 2.4 : 0.8;
-      const nextCost = cur.cost + carveCost + turnPenalty;
-      if (nextCost < bestCost[nz][nx]) {
-        bestCost[nz][nx] = nextCost;
-        prevCell[nz][nx] = [cur.x, cur.z];
-        pq.push({ x: nx, z: nz, cost: nextCost, dir: d });
-      }
-    }
-  }
-
-  if (bestCost[targetZ][targetX] < INF) {
-    let cx = targetX;
-    let cz = targetZ;
-    while (cx != null && cz != null) {
-      if (!protectedSolid.has(cellKey(cx, cz)) && grid[cz][cx] === CELL_TYPES.WALL) {
-        grid[cz][cx] = CELL_TYPES.EMPTY;
-      }
-      const p = prevCell[cz][cx];
-      if (!p) break;
-      cx = p[0];
-      cz = p[1];
-    }
-  }
-}
-
-function assignLevel0WallStyles(grid, wallStyles, cx, cz, chunkHash, shiftEpoch, rng) {
-  let archedCount = 0;
-  let hasPillar = false;
-
-  for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
-    for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
-      const ct = grid[lz][lx];
-      if (ct === CELL_TYPES.PILLAR) {
-        wallStyles[lz][lx] = "l0_pillar";
-        hasPillar = true;
-      } else if (ct === CELL_TYPES.MANILA_WALL) {
-        wallStyles[lz][lx] = "manila_wall";
-      } else if (ct === CELL_TYPES.GLITCH_WALL || ct === CELL_TYPES.OUTLET_WALL) {
-        wallStyles[lz][lx] = "solid";
-      } else {
-        wallStyles[lz][lx] = "solid";
-      }
-    }
-  }
-
-  const colonnadePreferred = chunkHash % 3 === 2 || (cx === 0 && cz === 0 && shiftEpoch === 0);
-  const thinXCandidates = [];
-
-  for (let lz = 1; lz < CHUNK_CELLS - 1; lz += 1) {
-    for (let lx = 1; lx < CHUNK_CELLS - 1; lx += 1) {
-      if (grid[lz][lx] !== CELL_TYPES.WALL) continue;
-      if (cx === 0 && cz === 0 && shiftEpoch === 0 && lx === 3 && lz === 3) continue;
-
-      const leftSolid = SOLID_CELL_TYPES.has(grid[lz][lx - 1]);
-      const rightSolid = SOLID_CELL_TYPES.has(grid[lz][lx + 1]);
-      const northSolid = SOLID_CELL_TYPES.has(grid[lz - 1][lx]);
-      const southSolid = SOLID_CELL_TYPES.has(grid[lz + 1][lx]);
-
-      if (leftSolid && rightSolid && !northSolid && !southSolid) {
-        thinXCandidates.push([lx, lz]);
-        if (colonnadePreferred && archedCount < 2 && rng() < 0.38) {
-          wallStyles[lz][lx] = "arched_divider";
-          archedCount += 1;
-        } else {
-          wallStyles[lz][lx] = "thin_x";
-        }
-      } else if (northSolid && southSolid && !leftSolid && !rightSolid) {
-        wallStyles[lz][lx] = rng() < 0.72 ? "thin_z" : "solid";
-      }
-    }
-  }
-
-  if (cx === 0 && cz === 0 && shiftEpoch === 0 && archedCount === 0) {
-    if (thinXCandidates.length > 0) {
-      const [ax, az] = thinXCandidates[0];
-      wallStyles[az][ax] = "arched_divider";
-      archedCount = 1;
-    } else {
-      for (let lz = 1; lz < CHUNK_CELLS - 1 && archedCount === 0; lz += 1) {
-        for (let lx = 1; lx < CHUNK_CELLS - 1; lx += 1) {
-          if (grid[lz][lx] !== CELL_TYPES.WALL || (lx === 3 && lz === 3)) continue;
-          const leftSolid = SOLID_CELL_TYPES.has(grid[lz][lx - 1]);
-          const rightSolid = SOLID_CELL_TYPES.has(grid[lz][lx + 1]);
-          const northOpen = !SOLID_CELL_TYPES.has(grid[lz - 1][lx]);
-          const southOpen = !SOLID_CELL_TYPES.has(grid[lz + 1][lx]);
-          if ((leftSolid || rightSolid) && northOpen && southOpen) {
-            wallStyles[lz][lx] = "arched_divider";
-            archedCount = 1;
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  return { archedCount, hasPillar };
-}
 
 function extractChunkWalls(grid, wallStyles, cx, cz, levelData, zoneTag) {
   const walls = [];
@@ -473,167 +233,648 @@ function extractChunkWalls(grid, wallStyles, cx, cz, levelData, zoneTag) {
   return walls;
 }
 
-function buildLevel0DerivedData({ grid, wallStyles, cx, cz, chunkHash, levelData, interactables, shiftEpoch }) {
-  const rng = createMulberry32((chunkHash ^ 0x9e3779b9) >>> 0);
-  const walls = extractChunkWalls(grid, wallStyles, cx, cz, levelData, "L0");
+/**
+ * Generates a high-density 12x12 (2.0m pitch) thin-drywall labyrinth for Level 0
+ * with turn-biased Growing-Tree corridors, abundant dead ends, asymmetric pocket,
+ * seamless cross-chunk doorways matching `L0_SUB_FOR_MACRO`, and sparse troffers.
+ */
+function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelData }) {
+  const rng = createMulberry32((chunkHash ^ 0x517cc1b7) >>> 0);
+  const grid = makeEmptyGrid();
+  const wallStyles = makeWallStyleGrid();
+  const originX = cx * CHUNK_WORLD_SIZE;
+  const originZ = cz * CHUNK_WORLD_SIZE;
+  const ceilH = levelData.environment.ceilingHeight;
+
+  const N = L0_SUB_CELLS;
+  const wallN = Array.from({ length: N }, () => Array(N).fill(true));
+  const wallS = Array.from({ length: N }, () => Array(N).fill(true));
+  const wallW = Array.from({ length: N }, () => Array(N).fill(true));
+  const wallE = Array.from({ length: N }, () => Array(N).fill(true));
+  const blocked = Array.from({ length: N }, () => Array(N).fill(false));
+
+  const openSubEdge = (sx, sz, dir) => {
+    if (sx < 0 || sx >= N || sz < 0 || sz >= N) return;
+    if (dir === "N") {
+      wallN[sz][sx] = false;
+      if (sz > 0) wallS[sz - 1][sx] = false;
+    } else if (dir === "S") {
+      wallS[sz][sx] = false;
+      if (sz < N - 1) wallN[sz + 1][sx] = false;
+    } else if (dir === "W") {
+      wallW[sz][sx] = false;
+      if (sx > 0) wallE[sz][sx - 1] = false;
+    } else if (dir === "E") {
+      wallE[sz][sx] = false;
+      if (sx < N - 1) wallW[sz][sx + 1] = false;
+    }
+  };
+
+  // Symmetric cross-chunk border doorways aligned to L0_SUB_FOR_MACRO
+  for (let slot = 1; slot <= 6; slot += 1) {
+    const s = L0_SUB_FOR_MACRO[slot];
+    if (isBorderOpening(seedNum, "level_0", cx, cz, cx, cz - 1, slot)) wallN[0][s] = false;
+    if (isBorderOpening(seedNum, "level_0", cx, cz, cx, cz + 1, slot)) wallS[N - 1][s] = false;
+    if (isBorderOpening(seedNum, "level_0", cx, cz, cx - 1, cz, slot)) wallW[s][0] = false;
+    if (isBorderOpening(seedNum, "level_0", cx, cz, cx + 1, cz, slot)) wallE[s][N - 1] = false;
+  }
+
+  const walls = [];
   const props = [];
   const propColliders = [];
   const lights = [];
+  const interactables = [];
+  const landmarkBoxes = [];
 
-  const interactKeys = new Set();
-  for (const item of interactables) {
-    if (item.lx != null && item.lz != null) interactKeys.add(cellKey(item.lx, item.lz));
-  }
+  const isInsideLandmark = (wx, wz, pad = 0.05) =>
+    landmarkBoxes.some(
+      (b) => wx >= b.minX - pad && wx <= b.maxX + pad && wz >= b.minZ - pad && wz <= b.maxZ + pad
+    );
 
-  // Off-grid staggered drywall wing walls creating visual blind corners & doorway baffles
-  let wingCount = 0;
-  for (let lz = 1; lz < CHUNK_CELLS - 1 && wingCount < 4; lz += 1) {
-    for (let lx = 1; lx < CHUNK_CELLS - 1 && wingCount < 4; lx += 1) {
-      const cell = grid[lz][lx];
-      if (SOLID_CELL_TYPES.has(cell) || cell === CELL_TYPES.STAIRS || cell === CELL_TYPES.DOOR) continue;
-      if (interactKeys.has(cellKey(lx, lz))) continue;
-      if (cx === 0 && cz === 0 && ((lx === 0 && lz === 0) || (lx === 1 && lz === 0) || (lx === 2 && lz === 3))) continue;
-      if (((lx * 7 + lz * 13 + (chunkHash >>> 4)) % 10) >= 3) continue;
+  const pushMacroWall = (lx, lz, cellType, style = "solid") => {
+    grid[lz][lx] = cellType;
+    wallStyles[lz][lx] = style;
+    const r = cellWorldRect(cx, cz, lx, lz, 0, 0);
+    walls.push({
+      lx,
+      lz,
+      cellType,
+      wallStyle: style,
+      zoneLabel: null,
+      minX: r.minX,
+      maxX: r.maxX,
+      minZ: r.minZ,
+      maxZ: r.maxZ,
+      height: ceilH,
+    });
+  };
 
-      const leftSolid = SOLID_CELL_TYPES.has(grid[lz][lx - 1]) && (wallStyles[lz][lx - 1] || "solid") === "solid";
-      const rightSolid = SOLID_CELL_TYPES.has(grid[lz][lx + 1]) && (wallStyles[lz][lx + 1] || "solid") === "solid";
-      const northSolid = SOLID_CELL_TYPES.has(grid[lz - 1][lx]) && (wallStyles[lz - 1][lx] || "solid") === "solid";
-      const southSolid = SOLID_CELL_TYPES.has(grid[lz + 1][lx]) && (wallStyles[lz + 1][lx] || "solid") === "solid";
+  const isOrigin = cx === 0 && cz === 0;
+  const isInitialOrigin = isOrigin && epoch === 0;
+  const isManilaChunk = !isOrigin && ((cx === 1 && cz === 0) || hashCoords(seedNum, "level_0", cx, cz, 0) % 13 === 0);
 
-      const r = cellWorldRect(cx, cz, lx, lz);
-      let wx = null;
-      let wz = null;
-      let ww = 0;
-      let wd = 0;
+  if (isOrigin) {
+    // Spawn (1.5, 1.5) sits inside sub-cell (0,0) with guaranteed > 0.53m clearance
+    openSubEdge(0, 0, "E");
+    openSubEdge(0, 0, "S");
 
-      if ((northSolid !== southSolid) && !leftSolid && !rightSolid) {
-        ww = 0.28;
-        wd = 1.04;
-        wx = r.centerX + (rng() < 0.5 ? -0.35 : 0.35);
-        wz = northSolid ? r.minZ + wd * 0.5 : r.maxZ - wd * 0.5;
-      } else if ((leftSolid !== rightSolid) && !northSolid && !southSolid) {
-        ww = 1.04;
-        wd = 0.28;
-        wz = r.centerZ + (rng() < 0.5 ? -0.35 : 0.35);
-        wx = leftSolid ? r.minX + ww * 0.5 : r.maxX - ww * 0.5;
-      }
+    grid[5][2] = CELL_TYPES.STAIRS;
+    openSubEdge(3, 8, "E");
+    openSubEdge(3, 7, "S");
+    landmarkBoxes.push({
+      minX: originX + 6.2,
+      maxX: originX + 8.8,
+      minZ: originZ + 15.2,
+      maxZ: originZ + 17.8,
+    });
+    const stairsRect = cellWorldRect(cx, cz, 2, 5);
+    interactables.push({
+      id: `l0_stairs_${cx}_${cz}`,
+      type: "STAIRS",
+      triggerType: "STAIRWELL",
+      label: "上り階段 → Level 1 (Eキー)",
+      x: stairsRect.centerX,
+      z: stairsRect.centerZ,
+      lx: 2,
+      lz: 5,
+      context: { targetLevelId: "level_1" },
+    });
 
-      if (wx !== null && wz !== null) {
-        props.push({
-          kind: "LEVEL0_WING_WALL",
-          x: wx,
-          z: wz,
-          w: ww,
-          d: wd,
-          height: levelData.environment.ceilingHeight,
-        });
-        propColliders.push({
-          kind: "LEVEL0_WING_WALL",
-          minX: wx - ww * 0.5,
-          maxX: wx + ww * 0.5,
-          minZ: wz - wd * 0.5,
-          maxZ: wz + wd * 0.5,
-          height: levelData.environment.ceilingHeight,
-        });
-        wingCount += 1;
+    if (isInitialOrigin) {
+      // Collision test block (lx=3, lz=3 -> [9..12, 9..12]) + unobstructed West/North approach
+      pushMacroWall(3, 3, CELL_TYPES.WALL, "solid");
+      blocked[5][5] = true;
+      openSubEdge(3, 4, "E");
+      openSubEdge(3, 5, "E");
+      openSubEdge(3, 4, "S");
+      openSubEdge(4, 4, "S");
+      openSubEdge(4, 3, "S");
+      openSubEdge(5, 3, "S");
+      landmarkBoxes.push({
+        minX: originX + 8.15,
+        maxX: originX + 12.02,
+        minZ: originZ + 8.15,
+        maxZ: originZ + 12.02,
+      });
+
+      // Glitch Wall (5,1) & Outlet Wall (6,6)
+      pushMacroWall(5, 1, CELL_TYPES.GLITCH_WALL, "solid");
+      blocked[1][8] = true;
+      blocked[2][8] = true;
+      landmarkBoxes.push({
+        minX: originX + 15.0,
+        maxX: originX + 18.0,
+        minZ: originZ + 3.0,
+        maxZ: originZ + 6.0,
+      });
+      const glitchRect = cellWorldRect(cx, cz, 5, 1);
+      interactables.push({
+        id: `l0_glitch_${cx}_${cz}`,
+        type: "GLITCH_WALL",
+        triggerType: "NOCLIP_WALL",
+        label: "不安定な壁面 (Nキーでノークリップ)",
+        x: glitchRect.centerX,
+        z: glitchRect.centerZ,
+        lx: 5,
+        lz: 1,
+        context: {},
+      });
+
+      pushMacroWall(6, 6, CELL_TYPES.OUTLET_WALL, "solid");
+      blocked[9][9] = true;
+      landmarkBoxes.push({
+        minX: originX + 18.0,
+        maxX: originX + 21.0,
+        minZ: originZ + 18.0,
+        maxZ: originZ + 21.0,
+      });
+    }
+  } else if (isManilaChunk) {
+    for (let mz = 3; mz <= 5; mz += 1) {
+      for (let mx = 3; mx <= 5; mx += 1) {
+        if (mx === 4 && mz === 4) {
+          grid[mz][mx] = CELL_TYPES.EMPTY;
+        } else if (mx === 3 && mz === 4) {
+          grid[mz][mx] = CELL_TYPES.DOOR;
+        } else {
+          pushMacroWall(mx, mz, CELL_TYPES.MANILA_WALL, "manila_wall");
+        }
       }
     }
+    for (let sz = 4; sz <= 8; sz += 1) {
+      for (let sx = 4; sx <= 8; sx += 1) {
+        blocked[sz][sx] = true;
+      }
+    }
+    blocked[6][4] = false;
+    blocked[6][5] = false;
+    blocked[6][6] = false;
+    blocked[6][7] = false;
+    openSubEdge(3, 6, "E");
+    openSubEdge(4, 6, "E");
+    openSubEdge(5, 6, "E");
+    openSubEdge(6, 6, "E");
+    landmarkBoxes.push({
+      minX: originX + 9.0,
+      maxX: originX + 18.0,
+      minZ: originZ + 9.0,
+      maxZ: originZ + 18.0,
+    });
+    const mr = cellWorldRect(cx, cz, 4, 4);
+    interactables.push({
+      id: `l0_manila_${cx}_${cz}`,
+      type: "MANILA_PORTAL",
+      triggerType: "MANILA_ENTER",
+      label: "The Manila Room へ入る (Eキー)",
+      x: mr.centerX,
+      z: mr.centerZ,
+      lx: 4,
+      lz: 4,
+      context: {},
+    });
+  } else if (chunkHash % 5 === 0) {
+    pushMacroWall(4, 3, CELL_TYPES.GLITCH_WALL, "solid");
+    blocked[5][6] = true;
+    landmarkBoxes.push({
+      minX: originX + 12.0,
+      maxX: originX + 15.0,
+      minZ: originZ + 9.0,
+      maxZ: originZ + 12.0,
+    });
+    const gRect = cellWorldRect(cx, cz, 4, 3);
+    interactables.push({
+      id: `l0_glitch_${cx}_${cz}`,
+      type: "GLITCH_WALL",
+      triggerType: "NOCLIP_WALL",
+      label: "歪んだ壁面境界 (Nキーでノークリップ)",
+      x: gRect.centerX,
+      z: gRect.centerZ,
+      lx: 4,
+      lz: 3,
+      context: {},
+    });
   }
 
-  // Scattered knee-height electrical outlets on true solid wall faces & carpet furniture indents
-  let outletCount = 0;
-  let indentCount = 0;
-  for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
-    for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
-      const cell = grid[lz][lx];
-      if (SOLID_CELL_TYPES.has(cell) || cell === CELL_TYPES.STAIRS || cell === CELL_TYPES.DOOR) continue;
+  // Carve turn-biased Growing-Tree spanning labyrinth on unblocked 12x12 sub-cells
+  const visitedSub = Array.from({ length: N }, () => Array(N).fill(false));
+  const runGrowingTreeFrom = (startX, startZ) => {
+    if (blocked[startZ][startX] || visitedSub[startZ][startX]) return;
+    visitedSub[startZ][startX] = true;
+    const active = [{ sx: startX, sz: startZ, dx: 0, dz: 0, straightRun: 0 }];
+    while (active.length > 0) {
+      const aIdx = rng() < 0.82 ? active.length - 1 : Math.floor(rng() * active.length);
+      const cur = active[aIdx];
+      const cand = [];
+      for (const [dx, dz, dir] of DIRS_4) {
+        const nx = cur.sx + dx;
+        const nz = cur.sz + dz;
+        if (nx < 0 || nx >= N || nz < 0 || nz >= N) continue;
+        if (blocked[nz][nx] || visitedSub[nz][nx]) continue;
+        const hasPrev = cur.dx !== 0 || cur.dz !== 0;
+        const sameDir = hasPrev && dx === cur.dx && dz === cur.dz;
+        const weight = sameDir ? (cur.straightRun >= 2 ? 0.06 : 1.0) : 4.8;
+        cand.push({ nx, nz, dx, dz, dir, sameDir, weight });
+      }
+      if (cand.length === 0) {
+        active.splice(aIdx, 1);
+        continue;
+      }
+      const totalW = cand.reduce((s, c) => s + c.weight, 0);
+      let roll = rng() * totalW;
+      let chosen = cand[cand.length - 1];
+      for (const c of cand) {
+        roll -= c.weight;
+        if (roll <= 0) {
+          chosen = c;
+          break;
+        }
+      }
+      openSubEdge(cur.sx, cur.sz, chosen.dir);
+      visitedSub[chosen.nz][chosen.nx] = true;
+      active.push({
+        sx: chosen.nx,
+        sz: chosen.nz,
+        dx: chosen.dx,
+        dz: chosen.dz,
+        straightRun: chosen.sameDir ? cur.straightRun + 1 : 0,
+      });
+    }
+  };
 
-      const r = cellWorldRect(cx, cz, lx, lz);
-      if (isInteriorCell(lx, lz)) {
-        const solidFace = (nx, nz) =>
-          isInBounds(nx, nz) &&
-          grid[nz][nx] === CELL_TYPES.WALL &&
-          (wallStyles[nz][nx] || "solid") === "solid";
-        const forceOutlet = outletCount === 0 && cx === 0 && cz === 0 && solidFace(lx + 1, lz);
-        if (forceOutlet || ((lx * 5 + lz * 11 + chunkHash) % 4 === 0)) {
-          if (solidFace(lx, lz - 1)) {
-            props.push({ kind: "WALL_OUTLET", x: r.centerX, z: r.minZ + 0.02, rotY: 0 });
-            outletCount += 1;
-          } else if (solidFace(lx, lz + 1)) {
-            props.push({ kind: "WALL_OUTLET", x: r.centerX, z: r.maxZ - 0.02, rotY: Math.PI });
-            outletCount += 1;
-          } else if (solidFace(lx - 1, lz)) {
-            props.push({ kind: "WALL_OUTLET", x: r.minX + 0.02, z: r.centerZ, rotY: Math.PI * 0.5 });
-            outletCount += 1;
-          } else if (solidFace(lx + 1, lz)) {
-            props.push({ kind: "WALL_OUTLET", x: r.maxX - 0.02, z: r.centerZ, rotY: -Math.PI * 0.5 });
-            outletCount += 1;
+  let rootSx = isOrigin ? 0 : isManilaChunk ? 3 : 1 + (chunkHash % 9);
+  let rootSz = isOrigin ? 0 : isManilaChunk ? 6 : 1 + ((chunkHash >>> 4) % 9);
+  if (blocked[rootSz][rootSx]) {
+    rootSx = 0;
+    rootSz = 0;
+  }
+  runGrowingTreeFrom(rootSx, rootSz);
+
+  // Sweep to guarantee 100% single-component connectivity of every unblocked sub-cell
+  let sweepAdded = true;
+  while (sweepAdded) {
+    sweepAdded = false;
+    for (let sz = 0; sz < N; sz += 1) {
+      for (let sx = 0; sx < N; sx += 1) {
+        if (blocked[sz][sx] || visitedSub[sz][sx]) continue;
+        for (const [dx, dz, dir] of DIRS_4) {
+          const nx = sx + dx;
+          const nz = sz + dz;
+          if (nx >= 0 && nx < N && nz >= 0 && nz < N && !blocked[nz][nx] && visitedSub[nz][nx]) {
+            openSubEdge(sx, sz, dir);
+            runGrowingTreeFrom(sx, sz);
+            sweepAdded = true;
+            break;
           }
         }
       }
-
-      const openDeg = DIRS_4.reduce((acc, [dx, dz]) => acc + (isWalkableCell(grid, lx + dx, lz + dz) ? 1 : 0), 0);
-      const isDeadEnd = openDeg === 1;
-      const forceIndent = cx === 0 && cz === 0 && indentCount < 2;
-      if (forceIndent || rng() < (isDeadEnd ? 0.34 : 0.12)) {
-        props.push({
-          kind: "CARPET_INDENT",
-          x: r.centerX + (rng() - 0.5) * 0.55,
-          z: r.centerZ + (rng() - 0.5) * 0.55,
-          w: 0.72 + rng() * 0.62,
-          d: 0.62 + rng() * 0.62,
-          rotY: rng() * Math.PI,
-        });
-        indentCount += 1;
-      }
-    }
-  }
-  if (outletCount === 0) {
-    const sw = walls.find((w) => w.cellType === CELL_TYPES.WALL && w.wallStyle === "solid");
-    if (sw) {
-      props.push({ kind: "WALL_OUTLET", x: (sw.minX + sw.maxX) * 0.5, z: sw.minZ - 0.02, rotY: Math.PI });
     }
   }
 
-  // Inconsistently placed fluorescent ceiling troffers (5-7 per chunk, >= 4 in chunk 0,0)
-  const lightCandidates = [];
-  for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
-    for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
-      if (!SOLID_CELL_TYPES.has(grid[lz][lx])) {
-        const deg = DIRS_4.reduce((acc, [dx, dz]) => acc + (isWalkableCell(grid, lx + dx, lz + dz) ? 1 : 0), 0);
-        lightCandidates.push({ lx, lz, deg });
+  // Subtle micro-loops (3-4) between distant branches so dead ends stay high (20-35/chunk)
+  const subDist = Array.from({ length: N }, () => Array(N).fill(-1));
+  const bfsQ = [[rootSx, rootSz]];
+  subDist[rootSz][rootSx] = 0;
+  for (let head = 0; head < bfsQ.length; head += 1) {
+    const [sx, sz] = bfsQ[head];
+    const dNext = subDist[sz][sx] + 1;
+    for (const [dx, dz, dir] of DIRS_4) {
+      const nx = sx + dx;
+      const nz = sz + dz;
+      if (nx < 0 || nx >= N || nz < 0 || nz >= N || blocked[nz][nx] || subDist[nz][nx] !== -1) continue;
+      const isClosed =
+        (dir === "N" && wallN[sz][sx]) ||
+        (dir === "S" && wallS[sz][sx]) ||
+        (dir === "W" && wallW[sz][sx]) ||
+        (dir === "E" && wallE[sz][sx]);
+      if (!isClosed) {
+        subDist[nz][nx] = dNext;
+        bfsQ.push([nx, nz]);
       }
     }
   }
-  const targetLights = Math.min(lightCandidates.length, cx === 0 && cz === 0 && shiftEpoch === 0 ? 6 : 5 + (chunkHash % 3));
-  for (let i = 0; i < lightCandidates.length && lights.length < targetLights; i += 1) {
-    const c = lightCandidates[(i * 5 + (chunkHash % Math.max(1, lightCandidates.length))) % lightCandidates.length];
-    if (c.deg === 1 && (i % 3 === 0) && lights.length >= 2) continue; // Keep occasional dead-ends darker
-    const r = cellWorldRect(cx, cz, c.lx, c.lz);
-    if (lights.some((lt) => Math.hypot(lt.x - r.centerX, lt.z - r.centerZ) < 4.0)) continue;
-    lights.push({
-      x: r.centerX + (rng() - 0.5) * 0.6,
-      y: levelData.environment.ceilingHeight - 0.04,
-      z: r.centerZ + (rng() - 0.5) * 0.6,
-      rotY: rng() < 0.42 ? Math.PI * 0.5 : 0,
-      flickerPhase: ((c.lx * 7 + c.lz * 13 + Math.abs(cx + cz)) % 17) * 0.37,
+
+  const loopCand = [];
+  for (let sz = 1; sz < N - 1; sz += 1) {
+    for (let sx = 1; sx < N - 1; sx += 1) {
+      if (blocked[sz][sx]) continue;
+      if (!blocked[sz][sx + 1] && wallE[sz][sx] && Math.abs(subDist[sz][sx] - subDist[sz][sx + 1]) >= 8) {
+        const mx = originX + (sx + 1) * L0_SUB_SIZE;
+        const mz = originZ + (sz + 0.5) * L0_SUB_SIZE;
+        if (!isInsideLandmark(mx, mz)) loopCand.push({ sx, sz, dir: "E" });
+      }
+      if (!blocked[sz + 1][sx] && wallS[sz][sx] && Math.abs(subDist[sz][sx] - subDist[sz + 1][sx]) >= 8) {
+        const mx = originX + (sx + 0.5) * L0_SUB_SIZE;
+        const mz = originZ + (sz + 1) * L0_SUB_SIZE;
+        if (!isInsideLandmark(mx, mz)) loopCand.push({ sx, sz, dir: "S" });
+      }
+    }
+  }
+  const targetLoops = Math.min(loopCand.length, 3 + (chunkHash % 2));
+  for (let i = 0; i < targetLoops; i += 1) {
+    const pick = loopCand[(i * 7 + (chunkHash >>> 3)) % loopCand.length];
+    openSubEdge(pick.sx, pick.sz, pick.dir);
+  }
+
+  // Carve 1 small asymmetric 2x2 chamber (4m x 4m) + optional central square column
+  let chamberCenter = null;
+  for (let tryIdx = 0; tryIdx < 64; tryIdx += 1) {
+    const cx0 = 1 + ((tryIdx * 3 + (chunkHash % 9)) % 9);
+    const cz0 = 1 + ((tryIdx * 5 + ((chunkHash >>> 5) % 9)) % 9);
+    const four = [
+      [cx0, cz0],
+      [cx0 + 1, cz0],
+      [cx0, cz0 + 1],
+      [cx0 + 1, cz0 + 1],
+    ];
+    if (four.some(([x, z]) => blocked[z][x])) continue;
+    const minWX = originX + cx0 * L0_SUB_SIZE;
+    const maxWX = minWX + 2 * L0_SUB_SIZE;
+    const minWZ = originZ + cz0 * L0_SUB_SIZE;
+    const maxWZ = minWZ + 2 * L0_SUB_SIZE;
+    const hitsLandmark = landmarkBoxes.some(
+      (b) => maxWX > b.minX - 0.3 && minWX < b.maxX + 0.3 && maxWZ > b.minZ - 0.3 && minWZ < b.maxZ + 0.3
+    );
+    if (hitsLandmark) continue;
+
+    openSubEdge(cx0, cz0, "E");
+    openSubEdge(cx0, cz0, "S");
+    openSubEdge(cx0 + 1, cz0, "S");
+    openSubEdge(cx0, cz0 + 1, "E");
+    chamberCenter = {
+      x: originX + (cx0 + 1) * L0_SUB_SIZE,
+      z: originZ + (cz0 + 1) * L0_SUB_SIZE,
+      sx: cx0,
+      sz: cz0,
+    };
+    break;
+  }
+
+  if (chamberCenter && (isInitialOrigin || chunkHash % 2 === 0)) {
+    const halfP = 0.36;
+    const pLx = Math.min(CHUNK_CELLS - 1, Math.max(0, Math.floor((chamberCenter.x - originX) / CELL_SIZE)));
+    const pLz = Math.min(CHUNK_CELLS - 1, Math.max(0, Math.floor((chamberCenter.z - originZ) / CELL_SIZE)));
+    walls.push({
+      lx: pLx,
+      lz: pLz,
+      cellType: CELL_TYPES.PILLAR,
+      wallStyle: "l0_pillar",
+      zoneLabel: null,
+      minX: chamberCenter.x - halfP,
+      maxX: chamberCenter.x + halfP,
+      minZ: chamberCenter.z - halfP,
+      maxZ: chamberCenter.z + halfP,
+      height: ceilH,
+    });
+  } else if (isInitialOrigin) {
+    // Fallback pillar inside (0,0) if no chamber fit
+    walls.push({
+      lx: 6,
+      lz: 2,
+      cellType: CELL_TYPES.PILLAR,
+      wallStyle: "l0_pillar",
+      zoneLabel: null,
+      minX: originX + 18.64,
+      maxX: originX + 19.36,
+      minZ: originZ + 7.64,
+      maxZ: originZ + 8.36,
+      height: ceilH,
     });
   }
-  const minLights = cx === 0 && cz === 0 ? 4 : 3;
-  for (const c of lightCandidates) {
+
+  // Emit seamless horizontal (EW) and vertical (NS) thin drywall wall segments
+  const halfT = L0_WALL_THICK * 0.5;
+  const ewWallSegments = [];
+  const nsWallSegments = [];
+  let archCount = 0;
+  let wallSegmentCount = 0;
+
+  for (let sz = 0; sz <= N; sz += 1) {
+    for (let sx = 0; sx < N; sx += 1) {
+      const closed = sz === 0 ? wallN[0][sx] : sz === N ? wallS[N - 1][sx] : wallN[sz][sx];
+      if (!closed) continue;
+      const wx = originX + (sx + 0.5) * L0_SUB_SIZE;
+      const wz = originZ + (sz === 0 ? halfT : sz === N ? CHUNK_WORLD_SIZE - halfT : sz * L0_SUB_SIZE);
+      if (isInsideLandmark(wx, wz)) continue;
+
+      const canArch =
+        sz >= 2 &&
+        sz <= N - 2 &&
+        sx >= 1 &&
+        sx <= N - 2 &&
+        !blocked[sz - 1]?.[sx] &&
+        !blocked[sz]?.[sx];
+      const useArch = canArch && archCount < (isInitialOrigin ? 2 : 3) && ((sx * 5 + sz * 7 + chunkHash) % 11 === 0);
+      const style = useArch ? "arched_divider" : "maze_wall_ew";
+      if (useArch) archCount += 1;
+
+      const seg = {
+        lx: Math.min(CHUNK_CELLS - 1, Math.floor((wx - originX) / CELL_SIZE)),
+        lz: Math.min(CHUNK_CELLS - 1, Math.floor((wz - originZ) / CELL_SIZE)),
+        cellType: CELL_TYPES.WALL,
+        wallStyle: style,
+        zoneLabel: null,
+        minX: wx - L0_SUB_SIZE * 0.5 - halfT,
+        maxX: wx + L0_SUB_SIZE * 0.5 + halfT,
+        minZ: wz - halfT,
+        maxZ: wz + halfT,
+        height: ceilH,
+      };
+      walls.push(seg);
+      ewWallSegments.push({ seg, wx, wz, sz, sx });
+      wallSegmentCount += 1;
+    }
+  }
+
+  // Guarantee >= 1 arched_divider in initial (0,0) (and colonnade chunks)
+  if (archCount === 0 && (isInitialOrigin || chunkHash % 3 === 2)) {
+    const fallbackArch = ewWallSegments.find(
+      (e) => e.sz >= 2 && e.sz <= N - 2 && e.sx >= 1 && e.sx <= N - 2 && !blocked[e.sz - 1]?.[e.sx] && !blocked[e.sz]?.[e.sx]
+    );
+    if (fallbackArch) {
+      fallbackArch.seg.wallStyle = "arched_divider";
+      archCount += 1;
+    }
+  }
+
+  const nsHalfT = 0.118; // 0.236m thick (4mm thinner than EW walls to avoid corner Z-fighting)
+  for (let sx = 0; sx <= N; sx += 1) {
+    for (let sz = 0; sz < N; sz += 1) {
+      const closed = sx === 0 ? wallW[sz][0] : sx === N ? wallE[sz][N - 1] : wallW[sz][sx];
+      if (!closed) continue;
+      const wx = originX + (sx === 0 ? halfT : sx === N ? CHUNK_WORLD_SIZE - halfT : sx * L0_SUB_SIZE);
+      const wz = originZ + (sz + 0.5) * L0_SUB_SIZE;
+      if (isInsideLandmark(wx, wz)) continue;
+
+      const seg = {
+        lx: Math.min(CHUNK_CELLS - 1, Math.floor((wx - originX) / CELL_SIZE)),
+        lz: Math.min(CHUNK_CELLS - 1, Math.floor((wz - originZ) / CELL_SIZE)),
+        cellType: CELL_TYPES.WALL,
+        wallStyle: "maze_wall_ns",
+        zoneLabel: null,
+        minX: wx - nsHalfT,
+        maxX: wx + nsHalfT,
+        minZ: wz - L0_SUB_SIZE * 0.5 - nsHalfT,
+        maxZ: wz + L0_SUB_SIZE * 0.5 + nsHalfT,
+        height: ceilH,
+      };
+      walls.push(seg);
+      nsWallSegments.push({ seg, wx, wz, sx, sz });
+      wallSegmentCount += 1;
+    }
+  }
+
+  // Electrical outlets flush on interior EW/NS drywall segments (~6-9 per chunk, >= 2 in 0,0)
+  const targetOutlets = isInitialOrigin ? 7 : 6 + (chunkHash % 4);
+  for (const ew of ewWallSegments) {
+    if (props.length >= targetOutlets) break;
+    if (ew.seg.wallStyle !== "maze_wall_ew" || ew.sz <= 0 || ew.sz >= N) continue;
+    if (((ew.sx * 3 + ew.sz * 11 + chunkHash) % 13) > 1 && !(isInitialOrigin && props.length < 2)) continue;
+    const faceSouth = (ew.sx + ew.sz) % 2 === 0 && !blocked[ew.sz]?.[ew.sx];
+    props.push({
+      kind: "WALL_OUTLET",
+      x: ew.wx,
+      z: ew.wz + (faceSouth ? halfT + 0.015 : -(halfT + 0.015)),
+      rotY: faceSouth ? 0 : Math.PI,
+    });
+  }
+  for (const ns of nsWallSegments) {
+    if (props.length >= targetOutlets) break;
+    if (ns.sx <= 0 || ns.sx >= N) continue;
+    if (((ns.sx * 7 + ns.sz * 5 + chunkHash) % 11) !== 0 && !(isInitialOrigin && props.length < 2)) continue;
+    const faceEast = (ns.sx + ns.sz) % 2 === 0 && !blocked[ns.sz]?.[ns.sx];
+    props.push({
+      kind: "WALL_OUTLET",
+      x: ns.wx + (faceEast ? nsHalfT + 0.015 : -(nsHalfT + 0.015)),
+      z: ns.wz,
+      rotY: faceEast ? Math.PI * 0.5 : -Math.PI * 0.5,
+    });
+  }
+
+  // Compute sub-grid maze metrics & dead ends, and emit carpet furniture indents
+  let deadEndCount = 0;
+  let cornerCount = 0;
+  const deadEndCells = [];
+  const walkableSubs = [];
+
+  for (let sz = 0; sz < N; sz += 1) {
+    for (let sx = 0; sx < N; sx += 1) {
+      if (blocked[sz][sx]) continue;
+      const openN = !wallN[sz][sx] && !(sz > 0 && blocked[sz - 1][sx]);
+      const openS = !wallS[sz][sx] && !(sz < N - 1 && blocked[sz + 1][sx]);
+      const openW = !wallW[sz][sx] && !(sx > 0 && blocked[sz][sx - 1]);
+      const openE = !wallE[sz][sx] && !(sx < N - 1 && blocked[sz][sx + 1]);
+      const deg = (openN ? 1 : 0) + (openS ? 1 : 0) + (openW ? 1 : 0) + (openE ? 1 : 0);
+      if (deg === 1) {
+        deadEndCount += 1;
+        deadEndCells.push({ sx, sz });
+      }
+      if (deg >= 3 || (deg === 2 && (openN || openS) && (openW || openE))) {
+        cornerCount += 1;
+      }
+      const wx = originX + (sx + 0.5) * L0_SUB_SIZE;
+      const wz = originZ + (sz + 0.5) * L0_SUB_SIZE;
+      if (!isInsideLandmark(wx, wz, 0.2)) {
+        walkableSubs.push({ sx, sz, wx, wz, deg });
+      }
+    }
+  }
+
+  let maxStraightRun = 0;
+  for (let sz = 0; sz < N; sz += 1) {
+    let run = 0;
+    for (let sx = 0; sx < N - 1; sx += 1) {
+      if (!blocked[sz][sx] && !blocked[sz][sx + 1] && !wallE[sz][sx]) {
+        run += 1;
+        if (run > maxStraightRun) maxStraightRun = run;
+      } else {
+        run = 0;
+      }
+    }
+  }
+  for (let sx = 0; sx < N; sx += 1) {
+    let run = 0;
+    for (let sz = 0; sz < N - 1; sz += 1) {
+      if (!blocked[sz][sx] && !blocked[sz + 1][sx] && !wallS[sz][sx]) {
+        run += 1;
+        if (run > maxStraightRun) maxStraightRun = run;
+      } else {
+        run = 0;
+      }
+    }
+  }
+
+  // Carpet indents in dead-end alcoves & chamber corners
+  let indentCount = 0;
+  for (const de of deadEndCells) {
+    if (indentCount >= 10) break;
+    const wx = originX + (de.sx + 0.5) * L0_SUB_SIZE;
+    const wz = originZ + (de.sz + 0.5) * L0_SUB_SIZE;
+    if (isInsideLandmark(wx, wz, 0.25)) continue;
+    if (rng() < 0.42 || (isInitialOrigin && indentCount < 2)) {
+      props.push({
+        kind: "CARPET_INDENT",
+        x: wx + (rng() - 0.5) * 0.35,
+        z: wz + (rng() - 0.5) * 0.35,
+        w: 0.65 + rng() * 0.45,
+        d: 0.55 + rng() * 0.45,
+        rotY: rng() * Math.PI,
+      });
+      indentCount += 1;
+    }
+  }
+  if (indentCount < 2) {
+    for (const sub of walkableSubs) {
+      if (indentCount >= 2) break;
+      props.push({ kind: "CARPET_INDENT", x: sub.wx, z: sub.wz, w: 0.78, d: 0.68, rotY: 0.4 });
+      indentCount += 1;
+    }
+  }
+
+  // Sparse, irregular fluorescent ceiling fixtures (5-7/chunk, >= 4 in 0,0) leaving dead-ends murky
+  const targetLights = Math.min(walkableSubs.length, isInitialOrigin ? 6 : 5 + (chunkHash % 3));
+  const preferredLights = walkableSubs.filter((s) => s.deg >= 2);
+  const lightPool = preferredLights.length >= 4 ? preferredLights : walkableSubs;
+  for (let i = 0; i < lightPool.length && lights.length < targetLights; i += 1) {
+    const c = lightPool[(i * 7 + (chunkHash % Math.max(1, lightPool.length))) % lightPool.length];
+    if (lights.some((lt) => Math.hypot(lt.x - c.wx, lt.z - c.wz) < 5.2)) continue;
+    lights.push({
+      x: c.wx + (rng() - 0.5) * 0.28,
+      y: ceilH - 0.04,
+      z: c.wz + (rng() - 0.5) * 0.28,
+      rotY: rng() < 0.45 ? Math.PI * 0.5 : 0,
+      flickerPhase: ((c.sx * 7 + c.sz * 13 + Math.abs(cx + cz)) % 17) * 0.37,
+    });
+  }
+  const minLights = isOrigin ? 4 : 3;
+  for (const c of walkableSubs) {
     if (lights.length >= minLights) break;
-    const r = cellWorldRect(cx, cz, c.lx, c.lz);
-    if (lights.some((lt) => Math.hypot(lt.x - r.centerX, lt.z - r.centerZ) < 2.2)) continue;
+    if (lights.some((lt) => Math.hypot(lt.x - c.wx, lt.z - c.wz) < 2.2)) continue;
     lights.push({
-      x: r.centerX + (rng() - 0.5) * 0.45,
-      y: levelData.environment.ceilingHeight - 0.04,
-      z: r.centerZ + (rng() - 0.5) * 0.45,
+      x: c.wx,
+      y: ceilH - 0.04,
+      z: c.wz,
       rotY: rng() < 0.35 ? Math.PI * 0.5 : 0,
-      flickerPhase: ((c.lx + c.lz) % 11) * 0.4,
+      flickerPhase: ((c.sx + c.sz) % 11) * 0.4,
     });
   }
 
-  return { walls, props, propColliders, lights };
+  return {
+    grid,
+    wallStyles,
+    walls,
+    props,
+    propColliders,
+    lights,
+    interactables,
+    mazeMeta: {
+      subCells: N,
+      subSize: L0_SUB_SIZE,
+      wallSegmentCount,
+      deadEndCount,
+      cornerCount,
+      maxStraightRun,
+    },
+  };
 }
 
 function cellWorldRect(cx, cz, lx, lz, insetX = 0, insetZ = insetX) {
@@ -661,404 +902,25 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
   const epoch = levelId === "level_0" ? Math.max(0, Number(shiftEpoch) || 0) : 0;
   const chunkHash = hashCoords(seedNum, levelId, cx, cz, epoch * 131);
   const rng = createMulberry32(chunkHash);
-  let grid = levelId === "level_0" ? makeSolidGrid() : makeEmptyGrid();
+  let grid = makeEmptyGrid();
   const wallStyles = makeWallStyleGrid();
   let lights = [];
-  const interactables = [];
+  let interactables = [];
   let props = [];
   let propColliders = [];
   let prebuiltWalls = null;
+  let mazeMeta = null;
   const zoneTag = `${String.fromCharCode(65 + Math.abs(cx * 3 + cz) % 6)}${Math.abs(cx + cz * 2) % 9 + 1}`;
 
   if (levelId === "level_0") {
-    const borderOpenings = getLevel0BorderOpenings(seedNum, cx, cz);
-    const protectedSolid = new Set();
-    const requiredOpen = [];
-    const allowPerimeterKeys = new Set();
-
-    for (const op of borderOpenings) {
-      grid[op.lz][op.lx] = CELL_TYPES.EMPTY;
-      requiredOpen.push([op.lx, op.lz]);
-      allowPerimeterKeys.add(cellKey(op.lx, op.lz));
-    }
-
-    const isOrigin = cx === 0 && cz === 0;
-    const isInitialOrigin = isOrigin && epoch === 0;
-    const isManilaChunk = !isOrigin && ((cx === 1 && cz === 0) || hashCoords(seedNum, "level_0", cx, cz, 0) % 13 === 0);
-
-    if (isOrigin) {
-      grid[0][0] = CELL_TYPES.EMPTY;
-      grid[0][1] = CELL_TYPES.EMPTY;
-      grid[1][1] = CELL_TYPES.EMPTY;
-      allowPerimeterKeys.add(cellKey(0, 0));
-      allowPerimeterKeys.add(cellKey(1, 0));
-      requiredOpen.push([0, 0], [1, 0], [1, 1], [2, 5]);
-      grid[5][2] = CELL_TYPES.STAIRS;
-
-      if (isInitialOrigin) {
-        protectedSolid.add(cellKey(3, 3));
-        protectedSolid.add(cellKey(5, 1));
-        protectedSolid.add(cellKey(6, 6));
-        grid[3][2] = CELL_TYPES.EMPTY;
-        requiredOpen.push([2, 3], [4, 1], [5, 6]);
-        grid[1][5] = CELL_TYPES.GLITCH_WALL;
-        grid[6][6] = CELL_TYPES.OUTLET_WALL;
-      }
-
-      const stairsRect = cellWorldRect(cx, cz, 2, 5);
-      interactables.push({
-        id: `l0_stairs_${cx}_${cz}`,
-        type: "STAIRS",
-        triggerType: "STAIRWELL",
-        label: "上り階段 → Level 1 (Eキー)",
-        x: stairsRect.centerX,
-        z: stairsRect.centerZ,
-        lx: 2,
-        lz: 5,
-        context: { targetLevelId: "level_1" },
-      });
-
-      if (isInitialOrigin) {
-        const glitchRect = cellWorldRect(cx, cz, 5, 1);
-        interactables.push({
-          id: `l0_glitch_${cx}_${cz}`,
-          type: "GLITCH_WALL",
-          triggerType: "NOCLIP_WALL",
-          label: "不安定な壁面 (Nキーでノークリップ)",
-          x: glitchRect.centerX,
-          z: glitchRect.centerZ,
-          lx: 5,
-          lz: 1,
-          context: {},
-        });
-      }
-    } else if (isManilaChunk) {
-      for (let mz = 3; mz <= 5; mz += 1) {
-        for (let mx = 3; mx <= 5; mx += 1) {
-          if (mx === 4 && mz === 4) {
-            grid[mz][mx] = CELL_TYPES.EMPTY;
-          } else if (mx === 3 && mz === 4) {
-            grid[mz][mx] = CELL_TYPES.DOOR;
-          } else {
-            grid[mz][mx] = CELL_TYPES.MANILA_WALL;
-            protectedSolid.add(cellKey(mx, mz));
-          }
-        }
-      }
-      grid[4][2] = CELL_TYPES.EMPTY;
-      requiredOpen.push([2, 4]);
-      const mr = cellWorldRect(cx, cz, 4, 4);
-      interactables.push({
-        id: `l0_manila_${cx}_${cz}`,
-        type: "MANILA_PORTAL",
-        triggerType: "MANILA_ENTER",
-        label: "The Manila Room へ入る (Eキー)",
-        x: mr.centerX,
-        z: mr.centerZ,
-        lx: 4,
-        lz: 4,
-        context: {},
-      });
-    }
-
-    // Phase A: Corner-Biased Growing-Tree Maze Carver on interior [1..6, 1..6]
-    let seedX = isOrigin ? 1 : 1 + (chunkHash % 4);
-    let seedZ = isOrigin ? 1 : 1 + ((chunkHash >>> 4) % 4);
-    if (protectedSolid.has(cellKey(seedX, seedZ))) {
-      seedX = 1;
-      seedZ = 1;
-    }
-    grid[seedZ][seedX] = CELL_TYPES.EMPTY;
-
-    const active = [{ x: seedX, z: seedZ, lastDx: 0, lastDz: 0 }];
-    while (active.length > 0) {
-      const pickNewest = rng() < 0.76;
-      const aIdx = pickNewest ? active.length - 1 : Math.floor(rng() * active.length);
-      const cur = active[aIdx];
-
-      const cand = [];
-      for (const [dx, dz] of DIRS_4) {
-        const nx = cur.x + dx;
-        const nz = cur.z + dz;
-        if (!isInteriorCell(nx, nz)) continue;
-        if (protectedSolid.has(cellKey(nx, nz))) continue;
-        if (grid[nz][nx] !== CELL_TYPES.WALL) continue;
-
-        let openInteriorNbr = 0;
-        for (const [ox, oz] of DIRS_4) {
-          const ax = nx + ox;
-          const az = nz + oz;
-          if (isInteriorCell(ax, az) && !SOLID_CELL_TYPES.has(grid[az][ax])) {
-            openInteriorNbr += 1;
-          }
-        }
-        if (openInteriorNbr > 1) continue;
-        if (wouldCreate2x2Open(grid, nx, nz)) continue;
-
-        // Weight 90-degree turns 3.2x higher than continuing straight
-        const isTurn = cur.lastDx !== 0 || cur.lastDz !== 0 ? (dx !== cur.lastDx || dz !== cur.lastDz) : true;
-        cand.push({ nx, nz, dx, dz, weight: isTurn ? 3.2 : 1.0 });
-      }
-
-      if (cand.length === 0) {
-        active.splice(aIdx, 1);
-        continue;
-      }
-
-      const totalW = cand.reduce((s, c) => s + c.weight, 0);
-      let roll = rng() * totalW;
-      let chosen = cand[cand.length - 1];
-      for (const c of cand) {
-        roll -= c.weight;
-        if (roll <= 0) {
-          chosen = c;
-          break;
-        }
-      }
-      grid[chosen.nz][chosen.nx] = CELL_TYPES.EMPTY;
-      active.push({ x: chosen.nx, z: chosen.nz, lastDx: chosen.dx, lastDz: chosen.dz });
-    }
-
-    // Phase B: Guarantee full weighted shortest-path connectivity to borders & exits
-    for (const [tx, tz] of requiredOpen) {
-      connectTargetWeighted(grid, seedX, seedZ, tx, tz, protectedSolid, allowPerimeterKeys);
-    }
-
-    // Phase C: Intentional dead-end alcove stubs + single optional loop + room archetype detail
-    const stubCandidates = [];
-    for (let lz = 1; lz < CHUNK_CELLS - 1; lz += 1) {
-      for (let lx = 1; lx < CHUNK_CELLS - 1; lx += 1) {
-        if (grid[lz][lx] !== CELL_TYPES.WALL || protectedSolid.has(cellKey(lx, lz))) continue;
-        const openNbrs = DIRS_4.reduce((s, [dx, dz]) => s + (isWalkableCell(grid, lx + dx, lz + dz) ? 1 : 0), 0);
-        if (openNbrs === 1 && !wouldCreate2x2Open(grid, lx, lz)) {
-          stubCandidates.push([lx, lz]);
-        }
-      }
-    }
-    let deadEndsAdded = 0;
-    for (let i = 0; i < stubCandidates.length && deadEndsAdded < 3; i += 1) {
-      const pick = stubCandidates[(i + Math.floor(rng() * stubCandidates.length)) % stubCandidates.length];
-      const [lx, lz] = pick;
-      if (grid[lz][lx] === CELL_TYPES.WALL) {
-        const openNbrs = DIRS_4.reduce((s, [dx, dz]) => s + (isWalkableCell(grid, lx + dx, lz + dz) ? 1 : 0), 0);
-        if (openNbrs === 1 && !wouldCreate2x2Open(grid, lx, lz)) {
-          grid[lz][lx] = CELL_TYPES.EMPTY;
-          deadEndsAdded += 1;
-        }
-      }
-    }
-
-    // Optional single micro-loop where two branches meet across 1 wall
-    const { dist: bfsDist } = computeWalkableBfs(grid, seedX, seedZ);
-    for (let lz = 2; lz < CHUNK_CELLS - 2; lz += 1) {
-      let looped = false;
-      for (let lx = 2; lx < CHUNK_CELLS - 2; lx += 1) {
-        if (grid[lz][lx] !== CELL_TYPES.WALL || protectedSolid.has(cellKey(lx, lz))) continue;
-        const nsOpen = isWalkableCell(grid, lx, lz - 1) && isWalkableCell(grid, lx, lz + 1) && SOLID_CELL_TYPES.has(grid[lz][lx - 1]) && SOLID_CELL_TYPES.has(grid[lz][lx + 1]);
-        const ewOpen = isWalkableCell(grid, lx - 1, lz) && isWalkableCell(grid, lx + 1, lz) && SOLID_CELL_TYPES.has(grid[lz - 1][lx]) && SOLID_CELL_TYPES.has(grid[lz + 1][lx]);
-        if (nsOpen && Math.abs(bfsDist[lz - 1][lx] - bfsDist[lz + 1][lx]) >= 6 && !wouldCreate2x2Open(grid, lx, lz)) {
-          grid[lz][lx] = CELL_TYPES.EMPTY;
-          looped = true;
-          break;
-        }
-        if (ewOpen && Math.abs(bfsDist[lz][lx - 1] - bfsDist[lz][lx + 1]) >= 6 && !wouldCreate2x2Open(grid, lx, lz)) {
-          grid[lz][lx] = CELL_TYPES.EMPTY;
-          looped = true;
-          break;
-        }
-      }
-      if (looped) break;
-    }
-
-    // Small irregular retail pocket on archetype 1/2 chunks + optional structural pillar
-    if (!isInitialOrigin && chunkHash % 3 !== 0) {
-      for (let lz = 2; lz <= 4; lz += 1) {
-        let pocketDone = false;
-        for (let lx = 2; lx <= 4; lx += 1) {
-          const cells = [[lx, lz], [lx + 1, lz], [lx, lz + 1], [lx + 1, lz + 1]];
-          if (cells.some(([px, pz]) => protectedSolid.has(cellKey(px, pz)))) continue;
-          const anyTouch = cells.some(([px, pz]) => isWalkableCell(grid, px, pz));
-          if (!anyTouch) continue;
-          for (const [px, pz] of cells) {
-            if (grid[pz][px] === CELL_TYPES.WALL) grid[pz][px] = CELL_TYPES.EMPTY;
-          }
-          if (
-            chunkHash % 3 === 1 &&
-            !SOLID_CELL_TYPES.has(grid[lz][lx]) &&
-            !(isOrigin && lx === 2 && lz === 5)
-          ) {
-            grid[lz][lx] = CELL_TYPES.PILLAR;
-            if (!checkLevel0Connectivity(grid, seedX, seedZ, borderOpenings, interactables)) {
-              grid[lz][lx] = CELL_TYPES.EMPTY;
-            }
-          }
-          pocketDone = true;
-          break;
-        }
-        if (pocketDone) break;
-      }
-    }
-
-    // Eliminate any accidental 8-cell straight corridors along highway tracks {1, 6}
-    const isAllConnectedAfterWall = () => {
-      const { visited } = computeWalkableBfs(grid, seedX, seedZ);
-      for (let z = 0; z < CHUNK_CELLS; z += 1) {
-        for (let x = 0; x < CHUNK_CELLS; x += 1) {
-          if (isWalkableCell(grid, x, z) && !visited[z][x]) return false;
-        }
-      }
-      return checkLevel0Connectivity(grid, seedX, seedZ, borderOpenings, interactables);
-    };
-    const trySealTrack = (coords) => {
-      for (const [lx, lz] of coords) {
-        if (grid[lz][lx] !== CELL_TYPES.EMPTY || protectedSolid.has(cellKey(lx, lz))) continue;
-        if (isOrigin && ((lx === 2 && lz === 3) || (lx === 1 && lz === 1))) continue;
-        grid[lz][lx] = CELL_TYPES.WALL;
-        if (isAllConnectedAfterWall()) return true;
-        grid[lz][lx] = CELL_TYPES.EMPTY;
-      }
-      return false;
-    };
-    for (const trackIdx of [1, 6]) {
-      let fullRow = true;
-      for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
-        if (SOLID_CELL_TYPES.has(grid[trackIdx][lx])) { fullRow = false; break; }
-      }
-      if (fullRow) {
-        trySealTrack([3, 4, 2, 5, 1, 6].map((lx) => [lx, trackIdx]));
-      }
-      let fullCol = true;
-      for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
-        if (SOLID_CELL_TYPES.has(grid[lz][trackIdx])) { fullCol = false; break; }
-      }
-      if (fullCol) {
-        trySealTrack([3, 4, 2, 5, 1, 6].map((lz) => [trackIdx, lz]));
-      }
-    }
-
-    // Glitch Wall placement for epoch > 0 origin or periodic % 5 chunks
-    if (!isInitialOrigin && !isManilaChunk && (isOrigin || chunkHash % 5 === 0)) {
-      for (let lz = 1; lz < CHUNK_CELLS - 1; lz += 1) {
-        let placed = false;
-        for (let lx = 1; lx < CHUNK_CELLS - 1; lx += 1) {
-          if (grid[lz][lx] !== CELL_TYPES.WALL || protectedSolid.has(cellKey(lx, lz))) continue;
-          const adjWalk = DIRS_4.some(([dx, dz]) => isWalkableCell(grid, lx + dx, lz + dz));
-          if (adjWalk) {
-            grid[lz][lx] = CELL_TYPES.GLITCH_WALL;
-            const gRect = cellWorldRect(cx, cz, lx, lz);
-            interactables.push({
-              id: `l0_glitch_${cx}_${cz}`,
-              type: "GLITCH_WALL",
-              triggerType: "NOCLIP_WALL",
-              label: "歪んだ壁面境界 (Nキーでノークリップ)",
-              x: gRect.centerX,
-              z: gRect.centerZ,
-              lx,
-              lz,
-              context: {},
-            });
-            placed = true;
-            break;
-          }
-        }
-        if (placed) break;
-      }
-    }
-
-    // Guarantee required initial (0,0) features: arched_divider + l0_pillar
-    if (isInitialOrigin) {
-      let hasArchSpot = false;
-      for (let lz = 1; lz < CHUNK_CELLS - 1 && !hasArchSpot; lz += 1) {
-        for (let lx = 1; lx < CHUNK_CELLS - 1; lx += 1) {
-          if (
-            grid[lz][lx] === CELL_TYPES.WALL &&
-            !(lx === 3 && lz === 3) &&
-            SOLID_CELL_TYPES.has(grid[lz][lx - 1]) &&
-            SOLID_CELL_TYPES.has(grid[lz][lx + 1]) &&
-            !SOLID_CELL_TYPES.has(grid[lz - 1][lx]) &&
-            !SOLID_CELL_TYPES.has(grid[lz + 1][lx])
-          ) {
-            hasArchSpot = true;
-            break;
-          }
-        }
-      }
-      if (!hasArchSpot) {
-        for (let lz = 2; lz <= 5 && !hasArchSpot; lz += 1) {
-          for (let lx = 2; lx <= 5; lx += 1) {
-            if ((lx === 3 && lz === 3) || protectedSolid.has(cellKey(lx, lz))) continue;
-            if (
-              grid[lz][lx] === CELL_TYPES.WALL &&
-              SOLID_CELL_TYPES.has(grid[lz][lx - 1]) &&
-              SOLID_CELL_TYPES.has(grid[lz][lx + 1]) &&
-              !protectedSolid.has(cellKey(lx, lz - 1)) &&
-              !protectedSolid.has(cellKey(lx, lz + 1))
-            ) {
-              const prevN = grid[lz - 1][lx];
-              const prevS = grid[lz + 1][lx];
-              if (grid[lz - 1][lx] === CELL_TYPES.WALL) grid[lz - 1][lx] = CELL_TYPES.EMPTY;
-              if (grid[lz + 1][lx] === CELL_TYPES.WALL) grid[lz + 1][lx] = CELL_TYPES.EMPTY;
-              if (checkLevel0Connectivity(grid, 0, 0, borderOpenings, interactables)) {
-                hasArchSpot = true;
-                break;
-              }
-              grid[lz - 1][lx] = prevN;
-              grid[lz + 1][lx] = prevS;
-            }
-          }
-        }
-      }
-
-      // Ensure at least 1 l0_pillar on an interior cell without breaking connectivity
-      let hasPillar = false;
-      for (let lz = 1; lz < CHUNK_CELLS - 1 && !hasPillar; lz += 1) {
-        for (let lx = 1; lx < CHUNK_CELLS - 1; lx += 1) {
-          if (grid[lz][lx] === CELL_TYPES.PILLAR) {
-            hasPillar = true;
-            break;
-          }
-        }
-      }
-      if (!hasPillar) {
-        for (let lz = 1; lz < CHUNK_CELLS - 1 && !hasPillar; lz += 1) {
-          for (let lx = 1; lx < CHUNK_CELLS - 1; lx += 1) {
-            if (
-              (lx === 3 && lz === 3) ||
-              (lx === 2 && lz === 3) ||
-              (lx === 1 && lz === 1) ||
-              protectedSolid.has(cellKey(lx, lz)) ||
-              (lx === 2 && lz === 5)
-            ) {
-              continue;
-            }
-            if (grid[lz][lx] === CELL_TYPES.WALL) {
-              grid[lz][lx] = CELL_TYPES.PILLAR;
-              if (checkLevel0Connectivity(grid, 0, 0, borderOpenings, interactables)) {
-                hasPillar = true;
-                break;
-              }
-              grid[lz][lx] = CELL_TYPES.WALL;
-            }
-          }
-        }
-      }
-    }
-
-    assignLevel0WallStyles(grid, wallStyles, cx, cz, chunkHash, epoch, rng);
-    const derived = buildLevel0DerivedData({
-      grid,
-      wallStyles,
-      cx,
-      cz,
-      chunkHash,
-      levelData,
-      interactables,
-      shiftEpoch: epoch,
-    });
-    prebuiltWalls = derived.walls;
-    props = derived.props;
-    propColliders = derived.propColliders;
-    lights = derived.lights;
+    const l0 = generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelData });
+    grid = l0.grid;
+    prebuiltWalls = l0.walls;
+    props = l0.props;
+    propColliders = l0.propColliders;
+    lights = l0.lights;
+    interactables = l0.interactables;
+    mazeMeta = l0.mazeMeta;
   } else if (levelId === "manila_room") {
     // Hermetically sealed 9m x 9m (x in [0,9], z in [0,9]) anomaly room inside Level 0.
     // East/South walls at lx=3, lz=3 leave lx=7 & lz=7 open for cross-chunk seam compatibility
@@ -1804,6 +1666,7 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
     worldSeed: seedNum,
     shiftEpoch: epoch,
     chunkHash,
+    mazeMeta,
     grid,
     walls,
     propColliders,
@@ -1815,7 +1678,7 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
 
 /**
  * Manages active chunks within loadRadius, evicts chunks beyond unloadRadius,
- * and drives Level 0 behind-the-gaze non-Euclidean corridor & chunk shifts.
+ * and filters collision lookups to nearby chunk bounding boxes.
  */
 export class ChunkManager {
   constructor({
@@ -1823,6 +1686,7 @@ export class ChunkManager {
     worldSeed = 1999,
     loadRadius = 2,
     unloadRadius = 3,
+    enableNonEuclidean = false,
     onChunkLoad = null,
     onChunkUnload = null,
     onChunkReload = null,
@@ -1831,6 +1695,7 @@ export class ChunkManager {
     this.worldSeed = Number(worldSeed) || 1999;
     this.loadRadius = loadRadius;
     this.unloadRadius = Math.max(unloadRadius, loadRadius);
+    this.enableNonEuclidean = Boolean(enableNonEuclidean);
     this.onChunkLoad = onChunkLoad;
     this.onChunkUnload = onChunkUnload;
     this.onChunkReload = onChunkReload;
@@ -1859,7 +1724,10 @@ export class ChunkManager {
         const cz = pcz + dz;
         const key = chunkKey(this.levelId, cx, cz);
         if (!this.chunks.has(key)) {
-          const epoch = this.levelId === "level_0" ? (this.chunkShiftEpochs.get(key) || 0) : 0;
+          const epoch =
+            this.levelId === "level_0" && this.enableNonEuclidean
+              ? (this.chunkShiftEpochs.get(key) || 0)
+              : 0;
           const chunkData = generateChunkData(this.levelId, cx, cz, this.worldSeed, epoch);
           this.chunks.set(key, chunkData);
           loadedKeys.push(key);
@@ -1877,6 +1745,7 @@ export class ChunkManager {
       );
       if (dist > this.unloadRadius || chunkData.levelId !== this.levelId) {
         if (
+          this.enableNonEuclidean &&
           this.levelId === "level_0" &&
           chunkData.levelId === "level_0" &&
           this.visitedChunks.has(key)
@@ -1901,11 +1770,7 @@ export class ChunkManager {
   }
 
   /**
-   * Non-Euclidean Level 0 mutation strictly outside player gaze:
-   *  Priority 1 ("rear_chunk"): regenerate a previously visited adjacent chunk
-   *    completely behind the player.
-   *  Priority 2 ("local_corridor"): rewire interior corridor walls behind the
-   *    player inside the current chunk while preserving full connectivity.
+   * Dormant non-Euclidean Level 0 rear-chunk shifter strictly outside player gaze.
    */
   tryNonEuclideanShift(playerX, playerZ, forwardX, forwardZ, opts = {}) {
     const emptyRes = { shifted: false, mode: null, chunkKey: null, shiftEpoch: 0, changedCells: [] };
@@ -1926,7 +1791,6 @@ export class ChunkManager {
       return true;
     };
 
-    // Priority 1: Regenerate a previously visited rear neighbor chunk at next epoch
     const rearCandidates = [];
     for (const chunk of this.chunks.values()) {
       if (chunk.levelId !== "level_0" || !this.visitedChunks.has(chunk.key)) continue;
@@ -1979,174 +1843,11 @@ export class ChunkManager {
       };
     }
 
-    // Priority 2: Rewire unseen rear interior corridors inside the current chunk
-    const curKey = chunkKey("level_0", pcx, pcz);
-    const curChunk = this.chunks.get(curKey);
-    if (!curChunk) return emptyRes;
-
-    const plx = Math.max(0, Math.min(CHUNK_CELLS - 1, Math.floor((playerX - pcx * CHUNK_WORLD_SIZE) / CELL_SIZE)));
-    const plz = Math.max(0, Math.min(CHUNK_CELLS - 1, Math.floor((playerZ - pcz * CHUNK_WORLD_SIZE) / CELL_SIZE)));
-    if (!isWalkableCell(curChunk.grid, plx, plz)) return emptyRes;
-
-    const protectedKeys = new Set();
-    const hasManila = curChunk.grid.some((row) => row.includes(CELL_TYPES.MANILA_WALL));
-    if (pcx === 0 && pcz === 0) {
-      for (const k of ["0:0", "1:0", "2:3", "3:3", "2:5", "5:1", "6:6"]) protectedKeys.add(k);
-    }
-    if (hasManila) {
-      for (let mz = 3; mz <= 5; mz += 1) {
-        for (let mx = 3; mx <= 5; mx += 1) protectedKeys.add(cellKey(mx, mz));
-      }
-    }
-    for (const it of curChunk.interactables) {
-      if (it.lx != null && it.lz != null) protectedKeys.add(cellKey(it.lx, it.lz));
-    }
-
-    const closable = [];
-    const openable = [];
-    for (let lz = 1; lz < CHUNK_CELLS - 1; lz += 1) {
-      for (let lx = 1; lx < CHUNK_CELLS - 1; lx += 1) {
-        if (protectedKeys.has(cellKey(lx, lz))) continue;
-        if (Math.max(Math.abs(lx - plx), Math.abs(lz - plz)) < 2) continue;
-
-        const ct = curChunk.grid[lz][lx];
-        if (ct !== CELL_TYPES.EMPTY && ct !== CELL_TYPES.WALL) continue;
-
-        const r = cellWorldRect(pcx, pcz, lx, lz);
-        if (Math.hypot(r.centerX - playerX, r.centerZ - playerZ) < 5.0) continue;
-
-        const cellPts = [
-          [r.minX, r.minZ],
-          [r.maxX, r.minZ],
-          [r.minX, r.maxZ],
-          [r.maxX, r.maxZ],
-          [r.centerX, r.centerZ],
-        ];
-        if (!cellPts.every(([px, pz]) => isSampleRear(px, pz, -0.42))) continue;
-
-        if (ct === CELL_TYPES.EMPTY) {
-          closable.push({ lx, lz });
-        } else if (DIRS_4.some(([dx, dz]) => isWalkableCell(curChunk.grid, lx + dx, lz + dz))) {
-          openable.push({ lx, lz, creates2x2: wouldCreate2x2Open(curChunk.grid, lx, lz) });
-        }
-      }
-    }
-
-    const borderOpenings = getLevel0BorderOpenings(this.worldSeed, pcx, pcz);
-    const hasNoOrphanPockets = (testGrid) => {
-      const { visited } = computeWalkableBfs(testGrid, plx, plz);
-      for (let z = 0; z < CHUNK_CELLS; z += 1) {
-        for (let x = 0; x < CHUNK_CELLS; x += 1) {
-          if (isWalkableCell(testGrid, x, z) && !visited[z][x]) return false;
-        }
-      }
-      return true;
-    };
-    const isMutatedGridValid = (testGrid) =>
-      checkLevel0Connectivity(testGrid, plx, plz, borderOpenings, curChunk.interactables) &&
-      hasNoOrphanPockets(testGrid);
-
-    const rotOffset = this.nonEuclideanShiftCount + Math.abs(plx * 7 + plz * 13);
-    const rotateList = (arr) =>
-      arr.length <= 1 ? arr : arr.map((_, idx) => arr[(idx + (rotOffset % arr.length)) % arr.length]);
-
-    const rotClose = rotateList(closable);
-    const rotOpen = rotateList([
-      ...openable.filter((o) => !o.creates2x2),
-      ...openable.filter((o) => o.creates2x2),
-    ]);
-
-    let chosenGrid = null;
-    let changedCells = [];
-
-    for (const cl of rotClose) {
-      for (const op of rotOpen) {
-        if (Math.abs(cl.lx - op.lx) + Math.abs(cl.lz - op.lz) === 1) continue;
-        const testGrid = curChunk.grid.map((row) => [...row]);
-        testGrid[cl.lz][cl.lx] = CELL_TYPES.WALL;
-        testGrid[op.lz][op.lx] = CELL_TYPES.EMPTY;
-        if (isMutatedGridValid(testGrid)) {
-          chosenGrid = testGrid;
-          changedCells = [
-            { lx: cl.lx, lz: cl.lz, from: CELL_TYPES.EMPTY, to: CELL_TYPES.WALL },
-            { lx: op.lx, lz: op.lz, from: CELL_TYPES.WALL, to: CELL_TYPES.EMPTY },
-          ];
-          break;
-        }
-      }
-      if (chosenGrid) break;
-    }
-
-    if (!chosenGrid) {
-      for (const op of rotOpen) {
-        const testGrid = curChunk.grid.map((row) => [...row]);
-        testGrid[op.lz][op.lx] = CELL_TYPES.EMPTY;
-        if (isMutatedGridValid(testGrid)) {
-          chosenGrid = testGrid;
-          changedCells = [{ lx: op.lx, lz: op.lz, from: CELL_TYPES.WALL, to: CELL_TYPES.EMPTY }];
-          break;
-        }
-      }
-    }
-    if (!chosenGrid) {
-      for (const cl of rotClose) {
-        const testGrid = curChunk.grid.map((row) => [...row]);
-        testGrid[cl.lz][cl.lx] = CELL_TYPES.WALL;
-        if (isMutatedGridValid(testGrid)) {
-          chosenGrid = testGrid;
-          changedCells = [{ lx: cl.lx, lz: cl.lz, from: CELL_TYPES.EMPTY, to: CELL_TYPES.WALL }];
-          break;
-        }
-      }
-    }
-
-    if (!chosenGrid) return emptyRes;
-
-    const nextEpoch = (curChunk.shiftEpoch || 0) + 1;
-    this.chunkShiftEpochs.set(curKey, nextEpoch);
-    const nextHash = hashCoords(this.worldSeed, "level_0", pcx, pcz, nextEpoch * 131);
-    const nextStyles = makeWallStyleGrid();
-    assignLevel0WallStyles(chosenGrid, nextStyles, pcx, pcz, nextHash, nextEpoch, createMulberry32(nextHash));
-
-    const levelData = getLevelData("level_0");
-    const derived = buildLevel0DerivedData({
-      grid: chosenGrid,
-      wallStyles: nextStyles,
-      cx: pcx,
-      cz: pcz,
-      chunkHash: nextHash,
-      levelData,
-      interactables: curChunk.interactables,
-      shiftEpoch: nextEpoch,
-    });
-
-    const updatedChunk = {
-      ...curChunk,
-      chunkHash: nextHash,
-      shiftEpoch: nextEpoch,
-      grid: chosenGrid,
-      walls: derived.walls,
-      propColliders: derived.propColliders,
-      lights: derived.lights,
-      props: derived.props,
-    };
-    this.chunks.set(curKey, updatedChunk);
-    this.nonEuclideanShiftCount += 1;
-    if (typeof this.onChunkReload === "function") {
-      this.onChunkReload(updatedChunk, curChunk);
-    }
-
-    return {
-      shifted: true,
-      mode: "local_corridor",
-      chunkKey: curKey,
-      shiftEpoch: nextEpoch,
-      changedCells,
-    };
+    return emptyRes;
   }
 
   /**
-   * Resolve circle-vs-AABB collision across the 3x3 chunk neighborhood
+   * Resolve circle-vs-AABB collision across nearby chunk AABBs within radius + 1.6m
    * (walls + propColliders), respecting vertical feetY clearance for jumpable obstacles.
    * Performs 2 separation passes for crisp corner sliding.
    */
@@ -2158,10 +1859,21 @@ export class ChunkManager {
     let nearbyGlitchWall = null;
 
     const { cx: pcx, cz: pcz } = this.worldToChunk(px, pz);
+    const chunkReach = radius + 1.6;
     const candidateWalls = [];
     for (let dz = -1; dz <= 1; dz += 1) {
       for (let dx = -1; dx <= 1; dx += 1) {
-        const chunk = this.chunks.get(chunkKey(this.levelId, pcx + dx, pcz + dz));
+        const cx = pcx + dx;
+        const cz = pcz + dz;
+        const cMinX = cx * CHUNK_WORLD_SIZE;
+        const cMaxX = cMinX + CHUNK_WORLD_SIZE;
+        const cMinZ = cz * CHUNK_WORLD_SIZE;
+        const cMaxZ = cMinZ + CHUNK_WORLD_SIZE;
+        const nearX = Math.max(cMinX, Math.min(px, cMaxX));
+        const nearZ = Math.max(cMinZ, Math.min(pz, cMaxZ));
+        if (Math.hypot(px - nearX, pz - nearZ) > chunkReach) continue;
+
+        const chunk = this.chunks.get(chunkKey(this.levelId, cx, cz));
         if (chunk) {
           for (const w of chunk.walls) {
             if (feetY < (w.height ?? 99) - 0.06) {
