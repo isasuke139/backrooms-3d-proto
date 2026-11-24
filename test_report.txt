@@ -1,0 +1,36 @@
+========================================================================
+ BACKROOMS WIKI PIPELINE & 3D PROTOTYPE — AUTOMATED VERIFICATION REPORT
+========================================================================
+Generated At : 2026-11-24T01:04:49.306Z
+Node Version : v22.23.4
+License      : CC-BY-SA-3.0 (https://creativecommons.org/licenses/by-sa/3.0/)
+Wiki Source  : https://backrooms.fandom.com/wiki/Backrooms_Wiki
+Summary      : TOTAL=12 | PASSED=12 | FAILED=0
+------------------------------------------------------------------------
+[PASS] (Dataset) manifest.json & index_linked.json parse cleanly (89ms)
+       pages=1721, downloaded_images=7753
+[PASS] (Dataset) Core pages exist with valid markdown & linked images (7ms)
+       Level 0(imgs=9/9), Level 1(imgs=11/11), The Hub(imgs=5/5), Level 2(imgs=15/16), Object 1(imgs=1/1), Object 2(imgs=1/1)
+[PASS] (Dataset) All pages[].markdown_path and downloaded images[].local_path exist on disk (127ms)
+       verified_md=1721, verified_unique_images=7753 (refs=10568)
+[PASS] (Dataset) All src/lore_data.js datasetPath and bundledPath textures exist (1ms)
+       checked_texture_slots=25
+[PASS] (License) CC-BY-SA-3.0 & backrooms.fandom.com attribution across all deliverables (59ms)
+       verified_files=10
+[PASS] (WorldGen) Chunk generation is byte-identical across repeated calls & distinct across seeds/coords (10ms)
+       tested_levels=5, seedA=2621724689, seedB=3555416481
+[PASS] (WorldGen) Spawn (1.5, 1.5) is collision-free & cross-chunk borders match symmetrically (5ms)
+       all_5_levels_spawn_clear_and_seams_symmetric
+[PASS] (Collision) Circle-vs-AABB blocks wall penetration and slides smoothly (1ms)
+       wall=[9..12, 9..12], clamped_x=8.580, slide_z=11.100
+[PASS] (Transitions) Deterministic Noclip, Distance Drift, Manila, Hub Sequence & Level Key gates (1ms)
+       l0_noclip=level_1, manila_exit=level_1, hub_gated_verified
+[PASS] (ChunkEviction) ChunkManager evicts distant chunks beyond unloadRadius and clears on reset() (5ms)
+       loaded=50, unloaded=50, active_after_reset=0
+[PASS] (Syntax) Node --check passes on all src/*.js & test_backrooms.js, py_compile passes on scraper (361ms)
+       syntax_ok=6 JS + 1 Python
+[PASS] (Deliverables) All required deliverable files exist and are non-empty (1ms)
+       deliverables_verified=13
+========================================================================
+Dataset Counts: pages=1721/1721, images_downloaded=7753, images_failed=0
+========================================================================

@@ -1,0 +1,426 @@
+{
+  "schema_version": "1.0.0",
+  "wiki": "Backrooms Wiki (Fandom)",
+  "wiki_url": "https://backrooms.fandom.com/wiki/Backrooms_Wiki",
+  "api_url": "https://backrooms.fandom.com/api.php",
+  "license": "CC-BY-SA-3.0",
+  "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+  "source_attribution": "All textual content and linked media metadata are retrieved from Backrooms Wiki (Fandom) (https://backrooms.fandom.com/wiki/Backrooms_Wiki) and distributed under CC-BY-SA-3.0 (https://creativecommons.org/licenses/by-sa/3.0/).",
+  "started_at": "2026-11-24T01:04:47Z",
+  "completed_at": "2026-11-24T01:04:47Z",
+  "resume_enabled": true,
+  "counts": {
+    "total_pages_listed": 1721,
+    "pages_fetched": 1721,
+    "pages_failed": 0,
+    "unique_files_referenced": 8326,
+    "image_files_eligible": 7753,
+    "images_downloaded": 7753,
+    "images_reused": 7753,
+    "images_skipped_non_image": 547,
+    "images_skipped_too_large": 0,
+    "images_missing_imageinfo": 26,
+    "images_failed": 0
+  },
+  "core_pages_verified": {
+    "Entity List": {
+      "pageid": 29291,
+      "markdown_path": "pages/Entity_List__29291.md",
+      "image_count": 24,
+      "downloaded_count": 24,
+      "images": [
+        {
+          "file_title": "File:Arabic-logo.png",
+          "local_path": "images/Arabic_logo__fbc92c1f9e.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Butterflyheading.png",
+          "local_path": "images/Butterflyheading__5aee9d7534.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Chinese-logo.webp",
+          "local_path": "images/Chinese_logo__1ec024eeac.webp",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Czech-logo.png",
+          "local_path": "images/Czech_logo__ccdf2c5477.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:French-logo.webp",
+          "local_path": "images/French_logo__2e134b1a59.webp",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Italian-logo.webp",
+          "local_path": "images/Italian_logo__9e845ae079.webp",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Japanese-logo.png",
+          "local_path": "images/Japanese_logo__f47138722e.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level 1.jpg",
+          "local_path": "images/Level_1__e8e28d1950.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Lightless4.jpg",
+          "local_path": "images/Lightless4__6519cfa0ff.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Liquid Pain.jpg",
+          "local_path": "images/Liquid_Pain__c6a7cc8402.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Megcentered.png",
+          "local_path": "images/Megcentered__cdae6bfc71.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:NewIndonesianLogo.png",
+          "local_path": "images/NewIndonesianLogo__2d3a51de2f.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Polish-logo.webp",
+          "local_path": "images/Polish_logo__660b76b64a.webp",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Portuguese-logo.webp",
+          "local_path": "images/Portuguese_logo__6e7ebc32be.webp",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Russian-logo.png",
+          "local_path": "images/Russian_logo__e6002b3e19.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Site-logo.png",
+          "local_path": "images/Site_logo__54979ae557.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Smile!.jpg",
+          "local_path": "images/Smile__5fd6991357.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Spanish-logo.webp",
+          "local_path": "images/Spanish_logo__48d3b53a41.webp",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Starry Night.png",
+          "local_path": "images/Starry_Night__4c2930f374.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:TalesMainPage.jpeg",
+          "local_path": "images/TalesMainPage__5fa4b52e54.jpeg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:The first.png",
+          "local_path": "images/The_first__f21ebcd687.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Thebackrooms.jpg",
+          "local_path": "images/Thebackrooms__229a8508a0.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Turkish-logo.webp",
+          "local_path": "images/Turkish_logo__6157882860.webp",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:VN Logo.webp",
+          "local_path": "images/VN_Logo__3b93e0e079.webp",
+          "status": "downloaded"
+        }
+      ]
+    },
+    "Level 0": {
+      "pageid": 83,
+      "markdown_path": "pages/Level_0__83.md",
+      "image_count": 9,
+      "downloaded_count": 9,
+      "images": [
+        {
+          "file_title": "File:Dated level 0 photograph.png",
+          "local_path": "images/Dated_level_0_photograph__8b3c00a038.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level 0 alt.png",
+          "local_path": "images/Level_0_alt__cb2859972e.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Major Explorer Group logo.png",
+          "local_path": "images/Major_Explorer_Group_logo__df2796968b.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Manila Room.png",
+          "local_path": "images/Manila_Room__8c1ecbd38f.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Sd-hexagon.png",
+          "local_path": "images/Sd_hexagon__55cbff3c83.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:The MEG's Logo (Thanks to Egglord1).png",
+          "local_path": "images/The_MEG_s_Logo_Thanks_to_Egglord1__665d8d7d8f.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:The origin of gamma's marvelous trinitrotoluene addiction.png",
+          "local_path": "images/The_origin_of_gamma_s_marvelous_trinitrotoluene_addiction__85b43a13ac.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Thebackrooms.jpg",
+          "local_path": "images/Thebackrooms__229a8508a0.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Wallpaper.png",
+          "local_path": "images/Wallpaper__7a9c233d8d.png",
+          "status": "downloaded"
+        }
+      ]
+    },
+    "Level 1": {
+      "pageid": 90,
+      "markdown_path": "pages/Level_1__90.md",
+      "image_count": 11,
+      "downloaded_count": 11,
+      "images": [
+        {
+          "file_title": "File:False Puddle.jpg",
+          "local_path": "images/False_Puddle__54b6916afa.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level1Again.webp",
+          "local_path": "images/Level1Again__ccb5856b94.webp",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level1Warehouse.jpeg",
+          "local_path": "images/Level1Warehouse__9a55eb1a79.jpeg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level 1.jpg",
+          "local_path": "images/Level_1__e8e28d1950.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level 1 Hallway.jpg",
+          "local_path": "images/Level_1_Hallway__724a41cdd4.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level 1 Rewrite.jpg",
+          "local_path": "images/Level_1_Rewrite__9020596f89.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level 1 Storage Units.jpg",
+          "local_path": "images/Level_1_Storage_Units__102ab70160.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:RedditRooftop.webp",
+          "local_path": "images/RedditRooftop__a8b5611e94.webp",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Sd-hexagon.png",
+          "local_path": "images/Sd_hexagon__55cbff3c83.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:SolusLevel1.jpg",
+          "local_path": "images/SolusLevel1__fda38a012a.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:SolusMaintHall.jpg",
+          "local_path": "images/SolusMaintHall__bfbbfb7c38.jpg",
+          "status": "downloaded"
+        }
+      ]
+    },
+    "Level 2": {
+      "pageid": 120,
+      "markdown_path": "pages/Level_2__120.md",
+      "image_count": 16,
+      "downloaded_count": 15,
+      "images": [
+        {
+          "file_title": "File:'''Level 2''' Second.png",
+          "local_path": "images/Level_2_Second__ccfb9dd53f.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Cleanlevel2.jpg",
+          "local_path": "images/Cleanlevel2__6645008516.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Darkkhallway.jpg",
+          "local_path": "images/Darkkhallway__50695cdce1.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Ewwtf!!!.jpg",
+          "local_path": "images/Ewwtf__2de32efac3.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Hallway1700s.png",
+          "local_path": "images/Hallway1700s__3c023fadd7.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Ice!!!!.jpg",
+          "local_path": "images/Ice__40de0a56be.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Johnlennon.png",
+          "local_path": "images/Johnlennon__c875c327c3.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level11level2.jpg",
+          "local_path": "images/Level11level2__1b09677b18.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level2main.png",
+          "local_path": "images/Level2main__964773df02.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level 2 .png",
+          "local_path": "images/Level_2__295224d5ed.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level 2 ambient.mp3",
+          "local_path": null,
+          "status": "skipped_non_image"
+        },
+        {
+          "file_title": "File:Pipeline1.jpg",
+          "local_path": "images/Pipeline1__d79693d772.jpg",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Rusty texturelevel2.png",
+          "local_path": "images/Rusty_texturelevel2__5c83402352.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Sd-hexagon.png",
+          "local_path": "images/Sd_hexagon__55cbff3c83.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Spoopy level2.png",
+          "local_path": "images/Spoopy_level2__d8277fb786.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Twistinglevel2.jpg",
+          "local_path": "images/Twistinglevel2__f3b4ef92cb.jpg",
+          "status": "downloaded"
+        }
+      ]
+    },
+    "Object 1": {
+      "pageid": 141,
+      "markdown_path": "pages/Object_1__141.md",
+      "image_count": 1,
+      "downloaded_count": 1,
+      "images": [
+        {
+          "file_title": "File:Almondwater.jpg",
+          "local_path": "images/Almondwater__3dda0b0d7d.jpg",
+          "status": "downloaded"
+        }
+      ]
+    },
+    "Object 2": {
+      "pageid": 56596,
+      "markdown_path": "pages/Object_2__56596.md",
+      "image_count": 1,
+      "downloaded_count": 1,
+      "images": [
+        {
+          "file_title": "File:A Stash of Level Keys.jpg",
+          "local_path": "images/A_Stash_of_Level_Keys__eac6b3da7d.jpg",
+          "status": "downloaded"
+        }
+      ]
+    },
+    "The Hub": {
+      "pageid": 61845,
+      "markdown_path": "pages/The_Hub__61845.md",
+      "image_count": 5,
+      "downloaded_count": 5,
+      "images": [
+        {
+          "file_title": "File:Hubdoor.png",
+          "local_path": "images/Hubdoor__4a30440d03.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Level154Hub.webp",
+          "local_path": "images/Level154Hub__69f2f5f5ea.webp",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Now THIS is the hub.png",
+          "local_path": "images/Now_THIS_is_the_hub__08bb5ae4c3.png",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Tunnel.webp",
+          "local_path": "images/Tunnel__d36fe2f1d2.webp",
+          "status": "downloaded"
+        },
+        {
+          "file_title": "File:Whitehubdoor.png",
+          "local_path": "images/Whitehubdoor__58c7c5564a.png",
+          "status": "downloaded"
+        }
+      ]
+    }
+  },
+  "failed_pages": [],
+  "failed_images": [],
+  "paths": {
+    "pages_dir": "pages",
+    "images_dir": "images",
+    "index_linked": "index_linked.json",
+    "manifest": "manifest.json"
+  }
+}

@@ -1,0 +1,5 @@
+dataset/
+__pycache__/
+.cache_*.json
+*.tmp
+.DS_Store
