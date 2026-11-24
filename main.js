@@ -212,6 +212,22 @@ function getSharedBoxGeo(w, h, d, tileSize = 3.0) {
   return geo;
 }
 
+const SHARED_PLANE_CACHE = new Map();
+function getSharedWorldPlaneGeo(w, d, tileSize = 2.4) {
+  const key = `${w.toFixed(2)}:${d.toFixed(2)}:${tileSize.toFixed(2)}`;
+  if (SHARED_PLANE_CACHE.has(key)) return SHARED_PLANE_CACHE.get(key);
+  const geo = new THREE.PlaneGeometry(w, d);
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i += 1) {
+    uv.setXY(i, (pos.getX(i) + w * 0.5) / tileSize, (pos.getY(i) + d * 0.5) / tileSize);
+  }
+  uv.needsUpdate = true;
+  markSharedGeo(geo);
+  SHARED_PLANE_CACHE.set(key, geo);
+  return geo;
+}
+
 const SHARED_PIPE_CACHE = new Map();
 function getSharedPipeGeometry(radius, length, radialSegs = 12) {
   const key = `${radius.toFixed(3)}:${length.toFixed(2)}:${radialSegs}`;
@@ -491,7 +507,12 @@ class LevelMaterialCache {
       );
       const isSinglePanel =
         slot === "accent" || (slot === "door" && levelId !== "level_0");
-      const repeat = slot === "floor" || slot === "ceiling" ? [8, 8] : [1, 1];
+      const repeat =
+        slot === "floor" && levelId === "the_hub"
+          ? [10, 10]
+          : slot === "floor" || slot === "ceiling"
+            ? [8, 8]
+            : [1, 1];
 
       const procTex = new THREE.CanvasTexture(canvas);
       procTex.wrapS = isSinglePanel ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
@@ -504,7 +525,7 @@ class LevelMaterialCache {
         map: procTex,
         roughness: slot === "floor" ? 0.88 : slot === "door" ? 0.45 : 0.85,
         metalness: slot === "door" && levelId !== "level_0" ? 0.62 : 0.05,
-        envMapIntensity: slot === "door" ? 0.9 : 0.45,
+        envMapIntensity: slot === "door" ? 0.9 : levelId === "the_hub" && slot === "floor" ? 1.15 : 0.45,
       });
       if (spec?.normalScale) {
         mat.normalScale = new THREE.Vector2(spec.normalScale, spec.normalScale);
@@ -652,6 +673,41 @@ class LevelMaterialCache {
         "./assets/textures/tex_l1_concrete_wall_nrm.jpg",
         "./assets/textures/tex_l1_concrete_wall_rgh.jpg",
         { repeat: [6, 5], slotName: "hub_concrete" }
+      );
+
+      const hubRoadMat = new THREE.MeshStandardMaterial({
+        map: makeFallbackTex("hub_road", 778, [1, 1]),
+        color: 0xffffff,
+        roughness: 0.78,
+        metalness: 0.06,
+        envMapIntensity: 1.25,
+        normalScale: new THREE.Vector2(1.35, 1.35),
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      });
+      loadSharedPbr(
+        hubRoadMat,
+        "./assets/textures/tex_hub_asphalt.jpg",
+        "./assets/textures/tex_hub_asphalt_nrm.jpg",
+        "./assets/textures/tex_hub_asphalt_rgh.jpg",
+        { repeat: [1, 1], slotName: "hub_road" }
+      );
+
+      const sidewalkMat = new THREE.MeshStandardMaterial({
+        map: makeFallbackTex("level1_concrete", 779, [1, 1]),
+        color: 0xd8d2c6,
+        roughness: 0.88,
+        metalness: 0.04,
+        envMapIntensity: 0.55,
+        normalScale: new THREE.Vector2(1.15, 1.15),
+      });
+      loadSharedPbr(
+        sidewalkMat,
+        "./assets/textures/tex_hub_sidewalk.jpg",
+        "./assets/textures/tex_hub_sidewalk_nrm.jpg",
+        "./assets/textures/tex_hub_sidewalk_rgh.jpg",
+        { repeat: [1, 1], slotName: "hub_sidewalk" }
       );
 
       const l2WoodMat = new THREE.MeshStandardMaterial({
@@ -825,6 +881,8 @@ class LevelMaterialCache {
 
       this.shared = {
         hubConcreteMat,
+        hubRoadMat,
+        sidewalkMat,
         l2WoodMat,
         rustPipeMat,
         darkPipeMat,
@@ -869,8 +927,7 @@ class LevelMaterialCache {
         pillarBandMat: new THREE.MeshStandardMaterial({ color: 0x6e2c36, roughness: 0.72 }),
         hazardYellowMat: new THREE.MeshStandardMaterial({ color: 0xd9a520, roughness: 0.6 }),
         barrierOrangeMat: new THREE.MeshStandardMaterial({ color: 0xd95826, roughness: 0.65 }),
-        roadLineMat: new THREE.MeshBasicMaterial({ color: 0xe6e3d8, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
-        sidewalkMat: new THREE.MeshStandardMaterial({ color: 0x8d8a82, roughness: 0.88 }),
+        roadLineMat: new THREE.MeshBasicMaterial({ color: 0xe6e3d8, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
         curbRedGlowMat: new THREE.MeshBasicMaterial({ color: 0xff3b2f }),
         gantryMat: new THREE.MeshStandardMaterial({ color: 0x17181c, roughness: 0.45, metalness: 0.75 }),
         warnSignMat: new THREE.MeshBasicMaterial({ map: createSignTexture("TRIANGLE_WARN") }),
@@ -1698,8 +1755,7 @@ function buildChunkGroup(chunkData) {
       const isX = prop.axis === "x";
       const roadW = isX ? prop.length : prop.width;
       const roadD = isX ? prop.width : prop.length;
-      const road = new THREE.Mesh(SHARED_GEOS.plane, mats.floor);
-      road.scale.set(roadW, roadD, 1);
+      const road = new THREE.Mesh(getSharedWorldPlaneGeo(roadW, roadD, 2.4), s.hubRoadMat);
       road.rotation.x = -Math.PI / 2;
       road.position.set(prop.centerX, 0.02, prop.centerZ);
       road.receiveShadow = true;
@@ -1726,7 +1782,7 @@ function buildChunkGroup(chunkData) {
         });
       }
     } else if (prop.kind === "SIDEWALK_CURB") {
-      const curb = new THREE.Mesh(getSharedBoxGeo(prop.length, 0.22, prop.width, 3.0), s.sidewalkMat);
+      const curb = new THREE.Mesh(getSharedBoxGeo(prop.length, 0.22, prop.width, 2.4), s.sidewalkMat);
       curb.position.set(prop.x, 0.11, prop.z);
       curb.receiveShadow = true;
       group.add(curb);

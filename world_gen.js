@@ -1507,11 +1507,12 @@ export function createProceduralTextureCanvas(
       }
     }
   } else if (style === "hub_road") {
-    ctx.fillStyle = "#2b2d30";
+    ctx.fillStyle = "#343638";
     ctx.fillRect(0, 0, width, height);
-    ctx.fillStyle = "#d99f2b";
-    ctx.fillRect(width * 0.48, 12, 8, 64);
-    ctx.fillRect(width * 0.48, 140, 8, 64);
+    for (let i = 0; i < 3200; i += 1) {
+      ctx.fillStyle = rng() > 0.45 ? "rgba(215,215,210,0.08)" : "rgba(0,0,0,0.22)";
+      ctx.fillRect(rng() * width, rng() * height, 2, 2);
+    }
   } else if (style === "hub_door") {
     ctx.fillStyle = "#6c737d";
     ctx.fillRect(0, 0, width, height);

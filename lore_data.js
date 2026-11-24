@@ -401,7 +401,7 @@ export const LEVELS = Object.freeze({
         bundledPath: "./assets/textures/tex_hub_asphalt.jpg",
         normalPath: "./assets/textures/tex_hub_asphalt_nrm.jpg",
         roughnessPath: "./assets/textures/tex_hub_asphalt_rgh.jpg",
-        normalScale: 0.95,
+        normalScale: 1.35,
         aiRegenerated: true,
         proceduralStyle: "hub_road",
       },
