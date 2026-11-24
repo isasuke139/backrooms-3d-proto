@@ -86,6 +86,8 @@ class LevelMaterialCache {
     const slots = ["wall", "floor", "ceiling", "door", "accent"];
     const materials = {};
     const status = { total: slots.length, wikiLoaded: 0, proceduralFallback: slots.length };
+    const maxAniso = Math.min(8, renderer?.capabilities?.getMaxAnisotropy?.() || 4);
+    const pendingLoads = [];
 
     for (const slot of slots) {
       const spec = levelData.textures[slot];
@@ -95,9 +97,12 @@ class LevelMaterialCache {
         256,
         seed + slot.length * 97
       );
+      const isSinglePanel =
+        slot === "accent" || (slot === "door" && levelId !== "level_0");
       const procTex = new THREE.CanvasTexture(canvas);
-      procTex.wrapS = THREE.RepeatWrapping;
-      procTex.wrapT = THREE.RepeatWrapping;
+      procTex.wrapS = isSinglePanel ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
+      procTex.wrapT = isSinglePanel ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
+      procTex.anisotropy = maxAniso;
       procTex.colorSpace = THREE.SRGBColorSpace;
       if (slot === "floor" || slot === "ceiling") {
         procTex.repeat.set(8, 8);
@@ -109,10 +114,13 @@ class LevelMaterialCache {
         metalness: slot === "door" ? 0.55 : 0.06,
       });
       materials[slot] = mat;
-
-      // Attempt asynchronous upgrade to local Wiki texture
-      const candidates = resolveTextureCandidates(levelId, slot);
-      this._tryLoadCandidates(candidates, slot, mat, procTex, status);
+      pendingLoads.push({
+        slot,
+        mat,
+        procTex,
+        isSinglePanel,
+        candidates: resolveTextureCandidates(levelId, slot),
+      });
     }
 
     const ceilingEmissiveMat = new THREE.MeshBasicMaterial({
@@ -127,6 +135,24 @@ class LevelMaterialCache {
       opacity: 0.88,
       roughness: 0.5,
     });
+
+    for (const item of pendingLoads) {
+      this._tryLoadCandidates(
+        item.candidates,
+        item.slot,
+        item.mat,
+        item.procTex,
+        status,
+        {
+          isSinglePanel: item.isSinglePanel,
+          anisotropy: maxAniso,
+          onUpgrade: item.slot === "wall" ? (tex) => {
+            glitchMat.map = tex;
+            glitchMat.needsUpdate = true;
+          } : null,
+        }
+      );
+    }
     const puddleMat = new THREE.MeshStandardMaterial({
       color: 0x1c2b33,
       roughness: 0.08,
@@ -158,7 +184,7 @@ class LevelMaterialCache {
     return entry;
   }
 
-  _tryLoadCandidates(candidates, slot, mat, fallbackTex, status) {
+  _tryLoadCandidates(candidates, slot, mat, fallbackTex, status, opts = {}) {
     if (!candidates || candidates.length === 0) return;
 
     const tryNext = (idx) => {
@@ -167,14 +193,18 @@ class LevelMaterialCache {
       this.loader.load(
         url,
         (tex) => {
-          tex.wrapS = THREE.RepeatWrapping;
-          tex.wrapT = THREE.RepeatWrapping;
+          tex.wrapS = opts.isSinglePanel ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
+          tex.wrapT = opts.isSinglePanel ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
+          tex.anisotropy = opts.anisotropy || 4;
           tex.colorSpace = THREE.SRGBColorSpace;
           if (slot === "floor" || slot === "ceiling") {
             tex.repeat.set(8, 8);
           }
           mat.map = tex;
           mat.needsUpdate = true;
+          if (typeof opts.onUpgrade === "function") {
+            opts.onUpgrade(tex);
+          }
           fallbackTex.dispose();
           status.wikiLoaded += 1;
           status.proceduralFallback = Math.max(0, status.total - status.wikiLoaded);
@@ -545,7 +575,7 @@ function updateTextureStatusHud() {
   const st = mats.status;
   ui.hudTexStatus.textContent =
     st.wikiLoaded > 0
-      ? `Wiki画像 (${st.wikiLoaded}/${st.total})`
+      ? `AI再生成テクスチャ (${st.wikiLoaded}/${st.total})`
       : `Canvasプロシージャル (${st.total}/${st.total})`;
 }
 

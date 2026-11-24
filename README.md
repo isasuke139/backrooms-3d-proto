@@ -52,7 +52,7 @@ python3 -m http.server 8080
 
 ## 4. デュアルテクスチャ読込 & 疎結合モジュール設計（Godot 4.3 MMO拡張対応）
 
-- **デュアルテクスチャローダー (`LevelMaterialCache`)**: 起動直後に `createProceduralTextureCanvas()` で即座に描画可能なプロシージャルテクスチャを割り当て、非同期で `./assets/textures/` および `../dataset/images/` の取得済み Wiki 画像を読み込み成功時のみ差し替えます。
+- **デュアルテクスチャローダー (`LevelMaterialCache`)**: 起動直後に `createProceduralTextureCanvas()` で即座に描画可能なプロシージャルテクスチャを割り当て、非同期で `./assets/textures/tex_*.jpg`（Backrooms Wiki一次参照画像からAI再生成・シームレス最適化した平面PBRアルベド素材）およびアーカイブ記録写真を読み込み、成功時に差し替えます。原典のWiki記録写真は `dataset/images/` およびゲーム内の M.E.G. 写真パネルに保持されています。
 - **純粋ESモジュール分離**:
   - `lore_data.js`: 階層・エンティティ・出典URL・CC-BY-SA-3.0メタデータ（DOM非依存 → Godot `.tres` 変換対応）
   - `world_gen.js`: シード決定論的 8×8 チャンク迷宮生成・境界シーム整合・AABB衝突解決・遠方破棄（`loadRadius=2`, `unloadRadius=3`）
