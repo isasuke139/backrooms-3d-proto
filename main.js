@@ -301,6 +301,64 @@ function createSignTexture(kind, text = "", bg = "#16181c", fg = "#ffffff") {
   return tex;
 }
 
+function createTileGridTexture(bg = "#edf4f8", lineColor = "#adc7d4") {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 128;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 2;
+  for (let i = 0; i <= 128; i += 16) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, 128);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, i);
+    ctx.lineTo(128, i);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const NEWS_BROADCASTS = [
+  { lang: "EN", header: "CH-04 WORLD NEWS", line1: "TRAFFIC & WEATHER ALERT", line2: "TEMP: -3.8C // NO SIGNALS", accent: "#2268b8" },
+  { lang: "JP", header: "NHK-BACKROOMS 臨時", line1: "地下連絡網 気温マイナス3.8度", line2: "外部通信途絶 // 換気稼働中", accent: "#b82e2e" },
+  { lang: "ES", header: "TELE-NEXUS 24H", line1: "BOLETIN METEOROLOGICO", line2: "SIN TRANSITO EN TUNEL", accent: "#b8741e" },
+  { lang: "FR", header: "INFO MONDE DIRECT", line1: "METEO SOUTERRAINE -3.8C", line2: "SECTEUR CENTRAL STABLE", accent: "#276e8c" },
+  { lang: "DE", header: "TAGESSCHAU AKTUELL", line1: "TUNNELNETZ TEMPERATUR", line2: "LUEFTUNGSSYSTEM AKTIV", accent: "#3d6b42" },
+  { lang: "RU", header: "НОВОСТИ КАНАЛ-1", line1: "СВОДКА ПО ТОННЕЛЯМ", line2: "СВЯЗЬ ОТСУТСТВУЕТ", accent: "#6d3b87" },
+];
+
+function paintNewsBroadcastCanvas(canvas, idx) {
+  const b = NEWS_BROADCASTS[idx % NEWS_BROADCASTS.length];
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#101622";
+  ctx.fillRect(0, 0, 256, 128);
+  ctx.fillStyle = b.accent;
+  ctx.fillRect(0, 0, 256, 30);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 16px monospace";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`[${b.lang}] ${b.header}`, 10, 15);
+  ctx.fillStyle = "#dce8f5";
+  ctx.font = "bold 14px sans-serif";
+  ctx.fillText(b.line1, 10, 56);
+  ctx.fillStyle = "#96adc4";
+  ctx.font = "12px monospace";
+  ctx.fillText(b.line2, 10, 82);
+  ctx.fillStyle = "#c92b2b";
+  ctx.fillRect(0, 104, 256, 24);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 12px monospace";
+  ctx.fillText("LIVE BROADCAST // HUB MONITORING", 10, 116);
+}
+
 // ---------------------------------------------------------------------------
 // Dual PBR Texture Loader (AI Albedo + Normal + Roughness + Canvas Fallback)
 // ---------------------------------------------------------------------------
@@ -430,12 +488,12 @@ class LevelMaterialCache {
     }
 
     const puddleMat = new THREE.MeshStandardMaterial({
-      color: 0x18252d,
-      roughness: 0.04,
-      metalness: 0.88,
-      envMapIntensity: 1.4,
+      color: 0x161d22,
+      roughness: 0.025,
+      metalness: 0.82,
+      envMapIntensity: 1.9,
       transparent: true,
-      opacity: 0.86,
+      opacity: 0.88,
     });
     const pipeMat = new THREE.MeshStandardMaterial({
       color: levelId === "the_hub" ? 0x8b9098 : 0x6b3b24,
@@ -450,56 +508,156 @@ class LevelMaterialCache {
     });
 
     if (!this.shared) {
-      const hubConcCanvas = createProceduralTextureCanvas("level1_concrete", 256, 256, 777);
-      const hubConcFallback = new THREE.CanvasTexture(hubConcCanvas);
-      hubConcFallback.wrapS = THREE.RepeatWrapping;
-      hubConcFallback.wrapT = THREE.RepeatWrapping;
-      hubConcFallback.repeat.set(6, 5);
-      hubConcFallback.colorSpace = THREE.SRGBColorSpace;
+      const loadSharedPbr = (mat, albedoUrl, normalUrl, roughUrl, { repeat = [1, 1], slotName = "shared" } = {}) => {
+        this._tryLoadCandidates(
+          [albedoUrl],
+          slotName,
+          mat,
+          mat.map,
+          { total: 1, wikiLoaded: 0, proceduralFallback: 1 },
+          { isSinglePanel: false, anisotropy: maxAniso, repeat }
+        );
+        this._loadAuxMap(normalUrl, {
+          isSinglePanel: false,
+          anisotropy: maxAniso,
+          repeat,
+          onLoaded: (nTex) => {
+            mat.normalMap = nTex;
+            mat.needsUpdate = true;
+          },
+        });
+        this._loadAuxMap(roughUrl, {
+          isSinglePanel: false,
+          anisotropy: maxAniso,
+          repeat,
+          onLoaded: (rTex) => {
+            mat.roughnessMap = rTex;
+            mat.roughness = 1.0;
+            mat.needsUpdate = true;
+          },
+        });
+      };
+
+      const makeFallbackTex = (style, seedOffset, repeat = [1, 1]) => {
+        const c = createProceduralTextureCanvas(style, 256, 256, seedOffset);
+        const t = new THREE.CanvasTexture(c);
+        t.wrapS = THREE.RepeatWrapping;
+        t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(repeat[0], repeat[1]);
+        t.colorSpace = THREE.SRGBColorSpace;
+        return t;
+      };
 
       const hubConcreteMat = new THREE.MeshStandardMaterial({
-        map: hubConcFallback,
+        map: makeFallbackTex("level1_concrete", 777, [6, 5]),
         color: 0xd0ba94,
         roughness: 0.92,
         metalness: 0.06,
         normalScale: new THREE.Vector2(1.1, 1.1),
         side: THREE.BackSide,
       });
-      this._tryLoadCandidates(
-        ["./assets/textures/tex_l1_concrete_wall.jpg"],
-        "hub_concrete",
+      loadSharedPbr(
         hubConcreteMat,
-        hubConcFallback,
-        { total: 1, wikiLoaded: 0, proceduralFallback: 1 },
-        { isSinglePanel: false, anisotropy: maxAniso, repeat: [6, 5] }
+        "./assets/textures/tex_l1_concrete_wall.jpg",
+        "./assets/textures/tex_l1_concrete_wall_nrm.jpg",
+        "./assets/textures/tex_l1_concrete_wall_rgh.jpg",
+        { repeat: [6, 5], slotName: "hub_concrete" }
       );
-      this._loadAuxMap("./assets/textures/tex_l1_concrete_wall_nrm.jpg", {
-        isSinglePanel: false,
-        anisotropy: maxAniso,
-        repeat: [6, 5],
-        onLoaded: (nTex) => {
-          hubConcreteMat.normalMap = nTex;
-          hubConcreteMat.needsUpdate = true;
-        },
+
+      const l2WoodMat = new THREE.MeshStandardMaterial({
+        map: makeFallbackTex("level1_concrete", 888, [1, 1]),
+        color: 0xffffff,
+        roughness: 0.9,
+        metalness: 0.04,
+        normalScale: new THREE.Vector2(1.1, 1.1),
       });
-      this._loadAuxMap("./assets/textures/tex_l1_concrete_wall_rgh.jpg", {
-        isSinglePanel: false,
-        anisotropy: maxAniso,
-        repeat: [6, 5],
-        onLoaded: (rTex) => {
-          hubConcreteMat.roughnessMap = rTex;
-          hubConcreteMat.roughness = 1.0;
-          hubConcreteMat.needsUpdate = true;
-        },
+      loadSharedPbr(
+        l2WoodMat,
+        "./assets/textures/tex_l2_wood_wall.jpg",
+        "./assets/textures/tex_l2_wood_wall_nrm.jpg",
+        "./assets/textures/tex_l2_wood_wall_rgh.jpg",
+        { repeat: [1, 1], slotName: "l2_wood" }
+      );
+
+      const rustPipeMat = new THREE.MeshStandardMaterial({
+        map: makeFallbackTex("level2_rust_pipe", 999, [2, 1]),
+        color: 0xd0a894,
+        roughness: 0.72,
+        metalness: 0.48,
+        envMapIntensity: 0.85,
+        normalScale: new THREE.Vector2(1.2, 1.2),
       });
+      loadSharedPbr(
+        rustPipeMat,
+        "./assets/textures/tex_l2_rust_wall.jpg",
+        "./assets/textures/tex_l2_rust_wall_nrm.jpg",
+        "./assets/textures/tex_l2_rust_wall_rgh.jpg",
+        { repeat: [2, 1], slotName: "rust_pipe" }
+      );
+
+      const makeHubLeafMat = (tintHex) => {
+        const m = new THREE.MeshStandardMaterial({
+          map: makeFallbackTex("hub_door", 404, [1, 1]),
+          color: tintHex,
+          roughness: 0.48,
+          metalness: 0.58,
+          envMapIntensity: 0.95,
+          normalScale: new THREE.Vector2(1.0, 1.0),
+        });
+        loadSharedPbr(
+          m,
+          "./assets/textures/tex_metal_door.jpg",
+          "./assets/textures/tex_metal_door_nrm.jpg",
+          "./assets/textures/tex_metal_door_rgh.jpg",
+          { repeat: [1, 1], slotName: "hub_door_leaf" }
+        );
+        return m;
+      };
+
+      const newsTvCanvas = document.createElement("canvas");
+      newsTvCanvas.width = 256;
+      newsTvCanvas.height = 128;
+      paintNewsBroadcastCanvas(newsTvCanvas, 0);
+      const newsTvTex = new THREE.CanvasTexture(newsTvCanvas);
+      newsTvTex.colorSpace = THREE.SRGBColorSpace;
 
       const hazardTex = createHazardStripeTexture();
       hazardTex.anisotropy = maxAniso;
+      const glowOrange = createGlowSpriteTexture("#ff9c47");
 
       this.shared = {
         hubConcreteMat,
+        l2WoodMat,
+        rustPipeMat,
+        newsTvCanvas,
+        newsTvTex,
+        newsTvMat: new THREE.MeshBasicMaterial({ map: newsTvTex }),
+        hubDoorLeafMats: {
+          level_0: makeHubLeafMat(0xe6da9e),
+          level_1: makeHubLeafMat(0xaeb6be),
+          level_2: makeHubLeafMat(0x8c7b6e),
+        },
+        goldPhiMat: new THREE.MeshStandardMaterial({ color: 0xd9a832, roughness: 0.25, metalness: 0.88, envMapIntensity: 1.3 }),
+        tileL37Mat: new THREE.MeshStandardMaterial({ map: createTileGridTexture("#eef6fa", "#b8d0dc"), roughness: 0.35, metalness: 0.1 }),
+        neonL154Mat: new THREE.MeshStandardMaterial({ color: 0x1d1a2c, emissive: 0x7c2ae8, emissiveIntensity: 0.35, roughness: 0.35, metalness: 0.6 }),
+        falsePuddleMat: new THREE.MeshStandardMaterial({ color: 0x5a6e75, roughness: 0.28, metalness: 0.25, transparent: true, opacity: 0.95 }),
+        falsePuddleRimMat: new THREE.MeshStandardMaterial({ color: 0x1d2224, roughness: 0.95 }),
+        carpetIndentMat: new THREE.MeshStandardMaterial({ color: 0x5e5028, roughness: 0.96, transparent: true, opacity: 0.42 }),
+        rebarMat: new THREE.MeshStandardMaterial({ color: 0x5c2f1b, roughness: 0.65, metalness: 0.7 }),
+        maintBlackDoorMat: new THREE.MeshStandardMaterial({ color: 0x101214, roughness: 0.38, metalness: 0.78, envMapIntensity: 0.9 }),
+        warehouseWoodDoorMat: new THREE.MeshStandardMaterial({ color: 0x6b4528, roughness: 0.82, metalness: 0.04 }),
+        alcoveVoidMat: new THREE.MeshStandardMaterial({ color: 0x100c08, roughness: 0.95 }),
+        crawlWireMat: new THREE.MeshBasicMaterial({ color: 0x141418 }),
+        crawlSparkMat: new THREE.MeshBasicMaterial({ color: 0x6ce5ff }),
+        manilaLightPoolMat: new THREE.MeshBasicMaterial({
+          map: glowOrange,
+          transparent: true,
+          opacity: 0.22,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
         hazardStripeMat: new THREE.MeshStandardMaterial({ map: hazardTex, roughness: 0.72 }),
-        baseboardMat: new THREE.MeshStandardMaterial({ color: 0x6e6032, roughness: 0.78 }),
+        baseboardMat: new THREE.MeshStandardMaterial({ color: 0x8d8147, roughness: 0.78 }),
         outletMat: new THREE.MeshStandardMaterial({ color: 0xded6b5, roughness: 0.55 }),
         socketDarkMat: new THREE.MeshBasicMaterial({ color: 0x1b1a16 }),
         crownTrimMat: new THREE.MeshStandardMaterial({ color: 0x9c6e46, roughness: 0.65 }),
@@ -518,6 +676,9 @@ class LevelMaterialCache {
         blueExitSignMat: new THREE.MeshBasicMaterial({ map: createSignTexture("BLUE_EXIT") }),
         exitSignMat: new THREE.MeshBasicMaterial({ map: createSignTexture("TEXT", "EXIT", "#0d381e", "#52ff91") }),
         fireExitSignMat: new THREE.MeshBasicMaterial({ map: createSignTexture("TEXT", "FIRE EXIT", "#3a100c", "#ff775e") }),
+        lorePhiSignMat: new THREE.MeshBasicMaterial({ map: createSignTexture("TEXT", "PHI (Φ)", "#45330a", "#ffd966") }),
+        lore37SignMat: new THREE.MeshBasicMaterial({ map: createSignTexture("TEXT", "LVL 37", "#193647", "#d6f2ff") }),
+        lore154SignMat: new THREE.MeshBasicMaterial({ map: createSignTexture("TEXT", "LVL 154", "#23123a", "#e49eff") }),
         doorLabelMats: {
           level_0: new THREE.MeshBasicMaterial({ map: createSignTexture("TEXT", "LEVEL 0", "#3a3216", "#ffe375") }),
           level_1: new THREE.MeshBasicMaterial({ map: createSignTexture("TEXT", "LEVEL 1", "#232629", "#d8e0e8") }),
@@ -527,7 +688,6 @@ class LevelMaterialCache {
         zoneStencilMatCache: new Map(),
         greenExitMat: new THREE.MeshBasicMaterial({ color: 0x22d665 }),
         fanBodyMat: new THREE.MeshStandardMaterial({ color: 0x32363d, roughness: 0.4, metalness: 0.8 }),
-        rustPipeMat: new THREE.MeshStandardMaterial({ color: 0x6b3922, roughness: 0.58, metalness: 0.58, envMapIntensity: 0.8 }),
         darkPipeMat: new THREE.MeshStandardMaterial({ color: 0x3c4147, roughness: 0.4, metalness: 0.78, envMapIntensity: 1.0 }),
         valveRedMat: new THREE.MeshStandardMaterial({ color: 0xb82924, roughness: 0.42, metalness: 0.4 }),
         extinguisherRedMat: new THREE.MeshStandardMaterial({ color: 0xc4221d, roughness: 0.35, metalness: 0.55 }),
@@ -544,8 +704,10 @@ class LevelMaterialCache {
         ],
         glowTextures: {
           warm: createGlowSpriteTexture("#fff0ad"),
-          orange: createGlowSpriteTexture("#ff9c47"),
+          orange: glowOrange,
           cool: createGlowSpriteTexture("#dceeff"),
+          cold: createGlowSpriteTexture("#e6f5ea"),
+          amber: createGlowSpriteTexture("#ffbe55"),
         },
         tintMatCache: new Map(),
       };
@@ -639,32 +801,48 @@ ui.viewport.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 
-// Procedural PBR reflection cubemap baked via PMREMGenerator
-{
+const LEVEL_PMREM_PALETTES = {
+  level_0: { bg: 0x685f33, top: 0xf7ffe8, side: 0xbca856 },
+  manila_room: { bg: 0x2b1b0e, top: 0xd97d36, side: 0x7d5836 },
+  level_1: { bg: 0x292e32, top: 0xe6f0fa, side: 0x596066 },
+  the_hub: { bg: 0x1b1206, top: 0xffb43b, side: 0x6e471a },
+  level_2: { bg: 0x0c100d, top: 0xb0c2b5, side: 0x252d27 },
+};
+
+const levelEnvTargets = new Map();
+
+function getLevelEnvironmentTexture(levelId) {
+  if (levelEnvTargets.has(levelId)) {
+    return levelEnvTargets.get(levelId).texture;
+  }
+  const pal = LEVEL_PMREM_PALETTES[levelId] || LEVEL_PMREM_PALETTES.level_0;
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envScene = new THREE.Scene();
-  envScene.background = new THREE.Color(0x28241a);
+  envScene.background = new THREE.Color(pal.bg);
   const topPanel = new THREE.Mesh(
     new THREE.PlaneGeometry(18, 18),
-    new THREE.MeshBasicMaterial({ color: 0xffefc2, side: THREE.DoubleSide })
+    new THREE.MeshBasicMaterial({ color: pal.top, side: THREE.DoubleSide })
   );
   topPanel.position.set(0, 6, 0);
   topPanel.rotation.x = Math.PI / 2;
-  const sideWarm = new THREE.Mesh(
+  const sidePanel = new THREE.Mesh(
     new THREE.PlaneGeometry(18, 8),
-    new THREE.MeshBasicMaterial({ color: 0x7d6c40, side: THREE.DoubleSide })
+    new THREE.MeshBasicMaterial({ color: pal.side, side: THREE.DoubleSide })
   );
-  sideWarm.position.set(0, 0, -8);
-  envScene.add(topPanel, sideWarm);
+  sidePanel.position.set(0, 0, -8);
+  envScene.add(topPanel, sidePanel);
   const envRT = pmrem.fromScene(envScene, 0.04);
-  scene.environment = envRT.texture;
-  scene.environmentIntensity = 0.55;
+  levelEnvTargets.set(levelId, envRT);
   topPanel.geometry.dispose();
   topPanel.material.dispose();
-  sideWarm.geometry.dispose();
-  sideWarm.material.dispose();
+  sidePanel.geometry.dispose();
+  sidePanel.material.dispose();
   pmrem.dispose();
+  return envRT.texture;
 }
+
+scene.environment = getLevelEnvironmentTexture("level_0");
+scene.environmentIntensity = 0.55;
 
 const camera = new THREE.PerspectiveCamera(
   74,
@@ -740,6 +918,12 @@ const state = {
   hubSequenceStep: "none",
   blackoutActive: false,
   blackoutTimer: 0,
+  manilaDwellSec: 0,
+  manilaWarnStep: 0,
+  tvChannelIdx: 0,
+  tvTimer: 0,
+  l2TremorTimer: 0,
+  l2TremorActiveTimer: 0,
   hudVisible: true,
   camcorderVisible: true,
   logs: [],
@@ -955,6 +1139,18 @@ function buildChunkGroup(chunkData) {
         const strip = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.38, 10), mats.ceilingEmissiveMat);
         strip.position.set(cx, 2.8, w.minZ - 0.08);
         group.add(strip);
+        const stripHalo = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: s.glowTextures.cool,
+            transparent: true,
+            opacity: 0.36,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          })
+        );
+        stripHalo.position.set(cx, 2.8, w.minZ - 0.2);
+        stripHalo.scale.set(1.6, 2.6, 1);
+        group.add(stripHalo);
       } else {
         // 3D Fire extinguisher mounted on pillar (File:SolusLevel1.jpg)
         const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.56, 14), s.extinguisherRedMat);
@@ -971,6 +1167,8 @@ function buildChunkGroup(chunkData) {
     const mat =
       w.cellType === CELL_TYPES.GLITCH_WALL
         ? mats.glitchMat
+        : w.wallStyle === "l2_wood"
+        ? s.l2WoodMat
         : mats.wall;
 
     const wallGeo = createWorldScaledBoxGeometry(width, w.height, depth, 3.0);
@@ -1017,33 +1215,109 @@ function buildChunkGroup(chunkData) {
     }
   }
 
-  // Props (Organic Puddles, Sculpted Pipes, Hub Arches, Gantries, Spinning Fans, Chamfers)
+  // Props (Organic Puddles, False Puddles, Rebar, Pipes, Hub Arches, TVs, Alcoves, Chamfers)
   for (const prop of chunkData.props) {
     if (prop.kind === "PUDDLE") {
       const pGeo = createIrregularPuddleGeometry(prop.radius, prop.x * 0.37 + prop.z * 0.71);
-      const pMesh = new THREE.Mesh(pGeo, mats.puddleMat);
-      pMesh.position.set(prop.x, 0.016, prop.z);
+      const pMesh = new THREE.Mesh(pGeo, prop.isFalsePuddle ? s.falsePuddleMat : mats.puddleMat);
+      pMesh.position.set(prop.x, prop.isFalsePuddle ? 0.015 : 0.016, prop.z);
       pMesh.receiveShadow = true;
       group.add(pMesh);
+      if (prop.isFalsePuddle) {
+        const rim = new THREE.Mesh(
+          new THREE.RingGeometry(prop.radius * 0.78, prop.radius * 1.12, 20),
+          s.falsePuddleRimMat
+        );
+        rim.rotation.x = -Math.PI / 2;
+        rim.position.set(prop.x, 0.019, prop.z);
+        group.add(rim);
+      }
+    } else if (prop.kind === "CARPET_INDENT") {
+      const ind = new THREE.Mesh(new THREE.PlaneGeometry(prop.w || 0.9, prop.d || 0.8), s.carpetIndentMat);
+      ind.rotation.x = -Math.PI / 2;
+      ind.rotation.z = prop.rotY || 0;
+      ind.position.set(prop.x, 0.008, prop.z);
+      group.add(ind);
+    } else if (prop.kind === "REBAR_CLUSTER") {
+      const rebarGroup = new THREE.Group();
+      rebarGroup.position.set(prop.x, 0, prop.z);
+      rebarGroup.rotation.y = prop.rotY || 0;
+      for (const [rx, rz, ang, len] of [
+        [0, 0, 0.22, 0.52],
+        [0.08, -0.06, -0.28, 0.44],
+        [-0.07, 0.07, 0.35, 0.58],
+      ]) {
+        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.018, len, 6), s.rebarMat);
+        rod.position.set(rx, len * 0.44, rz);
+        rod.rotation.z = ang;
+        rod.castShadow = true;
+        rebarGroup.add(rod);
+      }
+      group.add(rebarGroup);
+    } else if (prop.kind === "MAINT_DOOR" || prop.kind === "WAREHOUSE_DOOR") {
+      const dGrp = new THREE.Group();
+      dGrp.position.set(prop.x, 0, prop.z);
+      dGrp.rotation.y = prop.rotY || 0;
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(1.38, 2.34, 0.09), s.gantryMat);
+      frame.position.set(0, 1.17, 0);
+      const leafMat = prop.kind === "MAINT_DOOR" ? s.maintBlackDoorMat : s.warehouseWoodDoorMat;
+      const leaf = new THREE.Mesh(new THREE.BoxGeometry(1.22, 2.22, 0.06), leafMat);
+      leaf.position.set(0, 1.12, 0.02);
+      const knob = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.04, 0.1), s.brassMat);
+      knob.position.set(0.42, 1.02, 0.06);
+      dGrp.add(frame, leaf, knob);
+      group.add(dGrp);
     } else if (prop.kind === "OVERHEAD_PIPE") {
-      const pipeMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, CELL_SIZE, 16), mats.pipeMat);
-      pipeMesh.position.set(prop.x, h - 0.32, prop.z);
+      const pLen = prop.length || CELL_SIZE;
+      const py = prop.y ?? h - 0.32;
+      const pipeGeoMat = chunkData.levelId === "level_2" ? s.rustPipeMat : mats.pipeMat;
+      const pipeMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, pLen, 16), pipeGeoMat);
+      pipeMesh.position.set(prop.x, py, prop.z);
       if (prop.axis === "x") pipeMesh.rotation.z = Math.PI / 2;
       else pipeMesh.rotation.x = Math.PI / 2;
       pipeMesh.castShadow = true;
       group.add(pipeMesh);
-    } else if (prop.kind === "PHOTO_PLAQUE") {
-      const stand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 0.1), s.gantryMat);
-      stand.position.set(prop.x, 0.75, prop.z);
-      stand.castShadow = true;
-      group.add(stand);
-      const backing = new THREE.Mesh(new THREE.BoxGeometry(1.56, 1.18, 0.06), s.woodMat);
-      backing.position.set(prop.x, 1.65, prop.z);
-      backing.castShadow = true;
-      group.add(backing);
-      const photo = new THREE.Mesh(new THREE.PlaneGeometry(1.42, 1.04), mats.accent);
-      photo.position.set(prop.x, 1.65, prop.z + 0.04);
-      group.add(photo);
+      if (pLen > CELL_SIZE * 2) {
+        for (const off of [-8, 0, 8]) {
+          const flange = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 14), s.gantryMat);
+          flange.position.set(prop.x + (prop.axis === "x" ? off : 0), py, prop.z + (prop.axis === "z" ? off : 0));
+          if (prop.axis === "x") flange.rotation.z = Math.PI / 2;
+          else flange.rotation.x = Math.PI / 2;
+          group.add(flange);
+        }
+      }
+    } else if (prop.kind === "LIGHT_TRACK") {
+      const len = prop.length || CHUNK_WORLD_SIZE;
+      const isX = prop.axis === "x";
+      const track = new THREE.Mesh(
+        new THREE.BoxGeometry(isX ? len : 0.16, 0.08, isX ? 0.16 : len),
+        s.gantryMat
+      );
+      track.position.set(prop.x, prop.y || 5.48, prop.z);
+      group.add(track);
+    } else if (prop.kind === "WALL_TV") {
+      const tvGrp = new THREE.Group();
+      tvGrp.position.set(prop.x, 3.15, prop.z);
+      tvGrp.rotation.y = prop.rotY || 0;
+      const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.28), s.gantryMat);
+      bracket.position.set(0, 0.08, -0.14);
+      const tiltGrp = new THREE.Group();
+      tiltGrp.rotation.x = 0.22;
+      const caseBox = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.68, 0.14), s.gantryMat);
+      const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.56), s.newsTvMat);
+      screen.position.set(0, 0, 0.076);
+      tiltGrp.add(caseBox, screen);
+      tvGrp.add(bracket, tiltGrp);
+      group.add(tvGrp);
+    } else if (prop.kind === "WALL_ALCOVE") {
+      const alcGrp = new THREE.Group();
+      alcGrp.position.set(prop.x, 0.72, prop.z);
+      alcGrp.rotation.y = prop.rotY || 0;
+      const backing = new THREE.Mesh(new THREE.BoxGeometry(1.12, 1.38, 0.18), s.alcoveVoidMat);
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(1.26, 1.5, 0.12), s.sidewalkMat);
+      trim.position.set(0, 0, -0.05);
+      alcGrp.add(backing, trim);
+      group.add(alcGrp);
     } else if (prop.kind === "WALL_OUTLET") {
       const outletGroup = new THREE.Group();
       outletGroup.position.set(prop.x, 0.45, prop.z);
@@ -1357,7 +1631,7 @@ function buildChunkGroup(chunkData) {
     }
   }
 
-  // Interactables (Doors with Frames/Handles/Labels, Stairs, Level Key Pedestals)
+  // Interactables (Doors, Crawlspaces, Manila Resting Zone, Stairs, Sculpted Object 2 Keys)
   for (const item of chunkData.interactables) {
     if (item.type === "STAIRS") {
       for (let step = 0; step < 5; step += 1) {
@@ -1368,13 +1642,60 @@ function buildChunkGroup(chunkData) {
         sMesh.receiveShadow = true;
         group.add(sMesh);
       }
+    } else if (item.type === "CRAWLSPACE_EXIT") {
+      const cwGrp = new THREE.Group();
+      cwGrp.position.set(item.x, 0, item.z);
+      const surround = new THREE.Mesh(new THREE.BoxGeometry(1.36, 1.12, 0.28), s.gantryMat);
+      surround.position.set(0, 0.56, 0);
+      const voidHole = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.86, 0.34), s.alcoveVoidMat);
+      voidHole.position.set(0, 0.45, 0);
+      cwGrp.add(surround, voidHole);
+      for (const [wx, rotZ] of [[-0.28, 0.14], [-0.08, -0.18], [0.14, 0.22], [0.3, -0.1]]) {
+        const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.56, 5), s.crawlWireMat);
+        wire.position.set(wx, 0.62, 0.18);
+        wire.rotation.z = rotZ;
+        cwGrp.add(wire);
+      }
+      const spark = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), s.crawlSparkMat);
+      spark.position.set(0.14, 0.38, 0.19);
+      cwGrp.add(spark);
+      const plaque = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.24, 0.22), s.fireExitSignMat);
+      plaque.position.set(0, 1.28, 0);
+      cwGrp.add(plaque);
+      group.add(cwGrp);
+    } else if (item.type === "MANILA_REST_ZONE") {
+      const wornPad = new THREE.Mesh(new THREE.CircleGeometry(1.15, 24), s.carpetIndentMat);
+      wornPad.rotation.x = -Math.PI / 2;
+      wornPad.position.set(item.x, 0.012, item.z);
+      const warmPool = new THREE.Mesh(new THREE.CircleGeometry(1.5, 24), s.manilaLightPoolMat);
+      warmPool.rotation.x = -Math.PI / 2;
+      warmPool.position.set(item.x, 0.016, item.z);
+      group.add(wornPad, warmPool);
+    } else if (item.type === "LORE_DOOR") {
+      const doorGroup = new THREE.Group();
+      doorGroup.position.set(item.x, 0, item.z);
+      const ds = item.context?.doorStyle;
+      const frameOuter = new THREE.Mesh(new THREE.BoxGeometry(1.48, 2.48, 0.28), s.gantryMat);
+      frameOuter.position.set(0, 1.24, 0);
+      const leafMat =
+        ds === "gold_phi" ? s.goldPhiMat : ds === "l37_tile" ? s.tileL37Mat : s.neonL154Mat;
+      const dMesh = new THREE.Mesh(new THREE.BoxGeometry(1.28, 2.34, 0.22), leafMat);
+      dMesh.position.set(0, 1.18, 0);
+      dMesh.castShadow = true;
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.34), s.brassMat);
+      handle.position.set(0.42, 1.05, 0);
+      const signMat =
+        ds === "gold_phi" ? s.lorePhiSignMat : ds === "l37_tile" ? s.lore37SignMat : s.lore154SignMat;
+      const badge = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.32, 0.26), signMat);
+      badge.position.set(0, 2.58, 0);
+      doorGroup.add(frameOuter, dMesh, handle, badge);
+      group.add(doorGroup);
     } else if (
       item.type === "HUB_LEVEL_DOOR" ||
       item.type === "HUB_DOOR_A" ||
       item.type === "HUB_DOOR_B" ||
       item.type === "EXIT_DOOR" ||
-      item.type === "MANILA_PORTAL" ||
-      item.type === "MANILA_REST"
+      item.type === "MANILA_PORTAL"
     ) {
       const doorGroup = new THREE.Group();
       doorGroup.position.set(item.x, 0, item.z);
@@ -1383,7 +1704,12 @@ function buildChunkGroup(chunkData) {
       frameOuter.position.set(0, 1.24, 0);
       doorGroup.add(frameOuter);
 
-      const dMesh = new THREE.Mesh(new THREE.BoxGeometry(1.28, 2.34, 0.22), mats.door);
+      const tgtId = item.context?.targetLevelId;
+      const leafMat =
+        item.type === "HUB_LEVEL_DOOR" && tgtId && s.hubDoorLeafMats[tgtId]
+          ? s.hubDoorLeafMats[tgtId]
+          : mats.door;
+      const dMesh = new THREE.Mesh(new THREE.BoxGeometry(1.28, 2.34, 0.22), leafMat);
       dMesh.position.set(0, 1.18, 0);
       dMesh.castShadow = true;
       doorGroup.add(dMesh);
@@ -1392,7 +1718,6 @@ function buildChunkGroup(chunkData) {
       handle.position.set(0.42, 1.05, 0);
       doorGroup.add(handle);
 
-      const tgtId = item.context?.targetLevelId;
       const plaqueMat =
         tgtId && s.doorLabelMats[tgtId]
           ? s.doorLabelMats[tgtId]
@@ -1415,15 +1740,28 @@ function buildChunkGroup(chunkData) {
         ped.castShadow = true;
         group.add(ped);
 
-        const keyMesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), s.brassMat);
-        keyMesh.position.set(item.x, 1.25, item.z);
-        group.add(keyMesh);
-        keyPickupMeshes.push(keyMesh);
+        const keyGrp = new THREE.Group();
+        keyGrp.position.set(item.x, 1.24, item.z);
+        const bow = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.025, 8, 16), s.brassMat);
+        bow.position.set(-0.15, 0, 0);
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.34, 8), s.brassMat);
+        shaft.rotation.z = Math.PI / 2;
+        shaft.position.set(0.12, 0, 0);
+        const tag = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.02), s.rimMat);
+        tag.position.set(-0.15, -0.09, 0);
+        keyGrp.add(bow, shaft, tag);
+        for (const tx of [0.16, 0.21, 0.26]) {
+          const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.065, 0.025), s.brassMat);
+          tooth.position.set(tx, -0.04, 0);
+          keyGrp.add(tooth);
+        }
+        group.add(keyGrp);
+        keyPickupMeshes.push(keyGrp);
       }
     }
   }
 
-  // Ceiling Light Fixtures + Recessed Bezels + Additive Glow Sprites
+  // Per-Level Ceiling Light Fixtures & Halos
   const nearOriginOrPlayer =
     Math.max(
       Math.abs(chunkData.cx - Math.floor(state.player.x / CHUNK_WORLD_SIZE)),
@@ -1431,41 +1769,86 @@ function buildChunkGroup(chunkData) {
     ) <= 1;
 
   const glowTex =
-    chunkData.levelId === "manila_room" || chunkData.levelId === "the_hub"
+    chunkData.levelId === "manila_room"
       ? s.glowTextures.orange
+      : chunkData.levelId === "the_hub"
+      ? s.glowTextures.amber
       : chunkData.levelId === "level_1"
       ? s.glowTextures.cool
+      : chunkData.levelId === "level_2"
+      ? s.glowTextures.cold
       : s.glowTextures.warm;
 
   chunkData.lights.forEach((lt, idx) => {
-    const bezel = new THREE.Mesh(new THREE.BoxGeometry(1.28, 0.06, 0.64), s.gantryMat);
-    bezel.position.set(lt.x, lt.y + 0.02, lt.z);
-    group.add(bezel);
+    const ltGrp = new THREE.Group();
+    ltGrp.position.set(lt.x, lt.y, lt.z);
+    ltGrp.rotation.y = lt.rotY || 0;
 
-    const panel = new THREE.Mesh(new THREE.BoxGeometry(1.14, 0.08, 0.52), mats.ceilingEmissiveMat);
-    panel.position.set(lt.x, lt.y, lt.z);
-    group.add(panel);
+    if (chunkData.levelId === "manila_room") {
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.06, 16), s.brassMat);
+      collar.position.set(0, 0.06, 0);
+      const dome = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 0.14, 16), mats.ceilingEmissiveMat);
+      ltGrp.add(collar, dome);
+    } else if (chunkData.levelId === "level_1") {
+      const channel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.07, 0.16), s.gantryMat);
+      channel.position.set(0, 0.04, 0);
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 2.1, 10), mats.ceilingEmissiveMat);
+      tube.rotation.z = Math.PI / 2;
+      ltGrp.add(channel, tube);
+    } else if (chunkData.levelId === "the_hub") {
+      const hood = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.1, 0.46), s.gantryMat);
+      hood.position.set(0, 0.04, 0);
+      const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.12, 0.36), mats.ceilingEmissiveMat);
+      ltGrp.add(hood, bulb);
+    } else if (chunkData.levelId === "level_2") {
+      const cage = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.1, 0.24), s.gantryMat);
+      cage.position.set(0, 0.03, 0);
+      const diffuser = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.11, 0.16), mats.ceilingEmissiveMat);
+      ltGrp.add(cage, diffuser);
+    } else {
+      // level_0 flush acoustic troffer
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.04, 0.6), s.outletMat);
+      frame.position.set(0, 0.02, 0);
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(1.14, 0.05, 0.52), mats.ceilingEmissiveMat);
+      ltGrp.add(frame, panel);
+    }
+    group.add(ltGrp);
 
-    const spriteMat = new THREE.SpriteMaterial({
-      map: glowTex,
-      transparent: true,
-      opacity: 0.48,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    const halo = new THREE.Sprite(spriteMat);
-    halo.position.set(lt.x, lt.y - 0.14, lt.z);
-    halo.scale.set(2.4, 2.4, 1);
+    const halo = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: glowTex,
+        transparent: true,
+        opacity:
+          chunkData.levelId === "the_hub"
+            ? 0.56
+            : chunkData.levelId === "manila_room"
+            ? 0.48
+            : chunkData.levelId === "level_2"
+            ? 0.28
+            : 0.26,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    halo.position.set(lt.x, lt.y - 0.16, lt.z);
+    const haloScale = chunkData.levelId === "the_hub" ? 3.4 : chunkData.levelId === "manila_room" ? 2.8 : chunkData.levelId === "level_2" ? 1.6 : 2.1;
+    halo.scale.set(haloScale, haloScale, 1);
     group.add(halo);
 
-    if (nearOriginOrPlayer && idx === 0) {
+    const maxPts =
+      chunkData.levelId === "level_0" || chunkData.levelId === "level_1" || chunkData.levelId === "the_hub"
+        ? 2
+        : 1;
+    if (nearOriginOrPlayer && idx < maxPts) {
+      const range = chunkData.levelId === "the_hub" ? 24 : chunkData.levelId === "level_1" ? 20 : chunkData.levelId === "level_2" ? 14 : 16;
+      const decay = chunkData.levelId === "the_hub" ? 1.35 : chunkData.levelId === "level_2" ? 1.7 : 1.45;
       const pt = new THREE.PointLight(
         levelData.environment.lightColor,
         levelData.environment.lightIntensity,
-        18,
-        1.5
+        range,
+        decay
       );
-      pt.position.set(lt.x, lt.y - 0.3, lt.z);
+      pt.position.set(lt.x, lt.y - 0.32, lt.z);
       pt.userData = {
         baseIntensity: levelData.environment.lightIntensity,
         flickerPhase: lt.flickerPhase,
@@ -1512,10 +1895,14 @@ function applyLevelEnvironment(levelId) {
 
   scene.background = new THREE.Color(env.fogColor);
   scene.fog = new THREE.FogExp2(env.fogColor, env.fogDensity);
+  scene.environment = getLevelEnvironmentTexture(levelId);
+  renderer.toneMappingExposure = env.exposure ?? 1.05;
+
   ambientLight.color.setHex(env.ambientColor);
   ambientLight.intensity = env.ambientIntensity;
-  hemiLight.color.setHex(env.ambientColor);
-  hemiLight.groundColor.setHex(env.fogColor);
+  hemiLight.color.setHex(env.hemiSkyColor ?? env.ambientColor);
+  hemiLight.groundColor.setHex(env.hemiGroundColor ?? env.fogColor);
+  hemiLight.intensity = env.hemiIntensity ?? 0.28;
 
   ui.hudBadge.textContent = levelData.survivalClass.code;
   ui.hudBadge.style.borderColor = levelData.survivalClass.colorHex;
@@ -1524,7 +1911,9 @@ function applyLevelEnvironment(levelId) {
   ui.hudLevelSub.textContent = levelData.subtitle;
   ui.hudClassLabel.textContent = levelData.survivalClass.label;
   ui.hudMmoMode.textContent =
-    levelData.mmoInstanceMode === "solo_isolated"
+    levelId === "level_2"
+      ? "Solo Isolated (Radio Blackout)"
+      : levelData.mmoInstanceMode === "solo_isolated"
       ? "Solo Isolated (Phenomenon 15)"
       : "Shared MMO Shard Ready";
   ui.hudAttribution.innerHTML =
@@ -1539,6 +1928,10 @@ function applyLevelEnvironment(levelId) {
   smilerGroup.visible = false;
   state.blackoutActive = false;
   state.blackoutTimer = 0;
+  state.manilaDwellSec = 0;
+  state.manilaWarnStep = 0;
+  state.l2TremorTimer = 0;
+  state.l2TremorActiveTimer = 0;
 
   for (const line of levelData.ambientLogs) {
     addLog(line);
@@ -1595,6 +1988,12 @@ function executeInteraction() {
   const item = chunkManager.findNearestInteractable(state.player.x, state.player.z, 3.0);
   if (!item) {
     addLog("周囲にインタラクト可能な対象がありません。");
+    return;
+  }
+
+  if (item.triggerType === "LORE_HINT") {
+    audio.playDoorTransition();
+    addLog(item.context?.msg || item.label);
     return;
   }
 
@@ -1845,6 +2244,57 @@ function updateAtmosphere(dt, elapsedSec) {
     }
   }
 
+  // The Hub multi-language wall-mounted TV broadcast cycle (every 8s)
+  if (state.currentLevelId === "the_hub" && mats.shared?.newsTvCanvas && mats.shared?.newsTvTex) {
+    state.tvTimer += dt;
+    if (state.tvTimer >= 8.0) {
+      state.tvTimer = 0;
+      state.tvChannelIdx = (state.tvChannelIdx + 1) % NEWS_BROADCASTS.length;
+      paintNewsBroadcastCanvas(mats.shared.newsTvCanvas, state.tvChannelIdx);
+      mats.shared.newsTvTex.needsUpdate = true;
+    }
+  }
+
+  // Manila Room passive dwell-time exit (Wiki: remaining for extended period leads to Level 1 or Level 2)
+  if (state.currentLevelId === "manila_room") {
+    state.manilaDwellSec += dt;
+    if (state.manilaDwellSec >= 10 && state.manilaWarnStep < 1) {
+      state.manilaWarnStep = 1;
+      addLog("[MANILA ROOM] 壁紙の安らぎにより五感が鈍くなっていく…（このまま滞在すると別階層へ移行します）");
+    } else if (state.manilaDwellSec >= 20 && state.manilaWarnStep < 2) {
+      state.manilaWarnStep = 2;
+      addLog("[MANILA ROOM] 壁の奥からの囁きが強まる……（まもなく Level 1 / Level 2 へ空間転移）");
+    } else if (state.manilaDwellSec >= 30) {
+      const res = evaluateTransition({
+        currentLevelId: "manila_room",
+        triggerType: TRIGGER_TYPES.MANILA_REST,
+        worldSeed: state.worldSeed,
+        playerPos: { x: state.player.x, z: state.player.z },
+        context: {},
+      });
+      if (res.allowed) {
+        audio.playDoorTransition();
+        triggerGlitchFlash();
+        switchLevel(res.targetLevelId, res.spawnPos, res.reason);
+        return;
+      }
+    }
+  }
+
+  // Level 2 seismic tremor events (Wiki: frequent Ring-of-Fire magnitude earthquakes)
+  if (state.currentLevelId === "level_2") {
+    state.l2TremorTimer += dt;
+    if (state.l2TremorTimer >= 42.0) {
+      state.l2TremorTimer = 0;
+      state.l2TremorActiveTimer = 2.4;
+      audio.playTremor();
+      addLog("[SEISMIC] 環太平洋帯並みの地震を検知 — 保守坑道が振動しています");
+    }
+    if (state.l2TremorActiveTimer > 0) {
+      state.l2TremorActiveTimer = Math.max(0, state.l2TremorActiveTimer - dt);
+    }
+  }
+
   for (const km of keyPickupMeshes) {
     if (km.visible) {
       km.rotation.y += dt * 1.8;
@@ -1905,6 +2355,33 @@ function animate(now) {
       if (state.player.stepAccum >= 2.15) {
         state.player.stepAccum = 0;
         audio.playFootstep(state.currentLevelId);
+
+        if (state.currentLevelId === "level_1") {
+          const { cx: pcx, cz: pcz } = chunkManager.worldToChunk(state.player.x, state.player.z);
+          const curChunk = chunkManager.chunks.get(`${state.currentLevelId}:${pcx}:${pcz}`);
+          if (curChunk) {
+            for (const p of curChunk.props) {
+              if (p.kind !== "PUDDLE") continue;
+              const dist = Math.hypot(p.x - state.player.x, p.z - state.player.z);
+              if (dist <= p.radius) {
+                audio.playPuddleSplash();
+                if (p.isFalsePuddle) {
+                  state.player.y = PLAYER_EYE_HEIGHT - 0.55;
+                  const pushAng = Math.atan2(state.player.z - p.z, state.player.x - p.x);
+                  const safePos = chunkManager.resolveCollision(
+                    state.player.x + Math.cos(pushAng) * 1.3,
+                    state.player.z + Math.sin(pushAng) * 1.3,
+                    PLAYER_RADIUS
+                  );
+                  state.player.x = safePos.x;
+                  state.player.z = safePos.z;
+                  addLog("[HAZARD] False Puddle に足を踏み入れた！鋭い歯に引きずり込まれる前に這い上がった！");
+                }
+                break;
+              }
+            }
+          }
+        }
       }
 
       const streamRes = chunkManager.update(state.player.x, state.player.z);
@@ -1915,8 +2392,24 @@ function animate(now) {
       state.player.bobPhase = 0;
     }
 
+    // The Hub raised sidewalk curb elevation vs roadbed
+    let targetEyeY = PLAYER_EYE_HEIGHT;
+    if (state.currentLevelId === "the_hub") {
+      const cz = Math.floor(state.player.z / CHUNK_WORLD_SIZE);
+      if (cz % 2 === 0) {
+        const localZ = ((state.player.z % CHUNK_WORLD_SIZE) + CHUNK_WORLD_SIZE) % CHUNK_WORLD_SIZE;
+        if (localZ < 2.25 || (localZ > 9.75 && localZ < 12.0)) {
+          targetEyeY = PLAYER_EYE_HEIGHT + 0.22;
+        }
+      }
+    }
+    state.player.y += (targetEyeY - state.player.y) * Math.min(1, dt * 10);
+
+    const tremorAmp = state.l2TremorActiveTimer > 0 ? 0.045 * (state.l2TremorActiveTimer / 2.4) : 0;
+    const shakeX = tremorAmp > 0 ? Math.sin(elapsedSec * 52) * tremorAmp : 0;
+    const shakeY = tremorAmp > 0 ? Math.cos(elapsedSec * 61) * tremorAmp : 0;
     const bobOffset = moving ? Math.sin(state.player.bobPhase) * 0.045 : 0;
-    camera.position.set(state.player.x, state.player.y + bobOffset, state.player.z);
+    camera.position.set(state.player.x + shakeX, state.player.y + bobOffset + shakeY, state.player.z);
     camera.rotation.order = "YXZ";
     camera.rotation.y = state.player.yaw;
     camera.rotation.x = state.player.pitch;

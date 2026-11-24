@@ -230,6 +230,10 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
           grid[lz][lx] = CELL_TYPES.EMPTY;
         }
       }
+      // Guarantee open sightlines for irregular spawn lights & colonnade vistas
+      grid[2][5] = CELL_TYPES.EMPTY;
+      grid[4][2] = CELL_TYPES.EMPTY;
+
       // Guarantee full solid wall at (3,3) for collision test & framing divider walls
       grid[3][3] = CELL_TYPES.WALL;
       wallStyles[3][3] = "solid";
@@ -270,14 +274,6 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         lz: 5,
         context: { targetLevelId: "level_1" },
       });
-
-      const plaqueRect = cellWorldRect(cx, cz, 3, 2);
-      props.push({
-        kind: "PHOTO_PLAQUE",
-        x: plaqueRect.centerX,
-        z: plaqueRect.centerZ,
-        label: "M.E.G. 記録写真: Level 0",
-      });
     } else if ((cx === 1 && cz === 0) || (chunkHash % 13 === 0 && !(cx === 0 && cz === 0))) {
       for (let lz = 3; lz <= 5; lz += 1) {
         for (let lx = 3; lx <= 5; lx += 1) {
@@ -317,110 +313,155 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
       });
     }
 
-    // Scattered electrical outlets at knee height on walls (File:Thebackrooms.jpg)
+    // Scattered knee-height electrical outlets facing into open space & carpet furniture indents
     for (let lz = 1; lz < CHUNK_CELLS - 1; lz += 1) {
       for (let lx = 1; lx < CHUNK_CELLS - 1; lx += 1) {
-        if (grid[lz][lx] === CELL_TYPES.WALL && wallStyles[lz][lx] === "solid" && (lx + lz) % 3 === 0) {
+        const cell = grid[lz][lx];
+        if (cell === CELL_TYPES.WALL && wallStyles[lz][lx] === "solid" && (lx + lz) % 3 === 0) {
           const r = cellWorldRect(cx, cz, lx, lz);
-          props.push({ kind: "WALL_OUTLET", x: r.centerX, z: r.minZ - 0.03, rotY: 0 });
+          if (!SOLID_CELL_TYPES.has(grid[lz - 1][lx])) {
+            props.push({ kind: "WALL_OUTLET", x: r.centerX, z: r.minZ - 0.02, rotY: Math.PI });
+          } else if (!SOLID_CELL_TYPES.has(grid[lz + 1][lx])) {
+            props.push({ kind: "WALL_OUTLET", x: r.centerX, z: r.maxZ + 0.02, rotY: 0 });
+          }
+        } else if (!SOLID_CELL_TYPES.has(cell) && cell !== CELL_TYPES.STAIRS && cell !== CELL_TYPES.DOOR) {
+          const r = cellWorldRect(cx, cz, lx, lz);
+          const guaranteedIndent = cx === 0 && cz === 0 && ((lx === 1 && lz === 2) || (lx === 2 && lz === 1));
+          if (guaranteedIndent || rng() < 0.12) {
+            props.push({
+              kind: "CARPET_INDENT",
+              x: r.centerX + (rng() - 0.5) * 0.55,
+              z: r.centerZ + (rng() - 0.5) * 0.55,
+              w: 0.72 + rng() * 0.65,
+              d: 0.62 + rng() * 0.65,
+              rotY: rng() * Math.PI,
+            });
+          }
         }
       }
     }
 
-    // Straight office rows of fluorescent light panels
-    for (const lx of [1, 4, 6]) {
-      for (const lz of [1, 4]) {
+    // Inconsistently placed fluorescent light fixtures (Level 0 Wiki: inconsistent lighting)
+    const lightCandidates = [];
+    for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
+      for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
+        if (!SOLID_CELL_TYPES.has(grid[lz][lx])) {
+          lightCandidates.push([lx, lz]);
+        }
+      }
+    }
+    if (cx === 0 && cz === 0) {
+      for (const [lx, lz, jx, jz, rotY] of [
+        [1, 1, 0.18, -0.14, 0],
+        [3, 1, -0.22, 0.2, Math.PI * 0.5],
+        [5, 2, 0.15, -0.24, 0],
+        [2, 4, -0.24, 0.16, 0.12],
+      ]) {
         if (!SOLID_CELL_TYPES.has(grid[lz][lx])) {
           const r = cellWorldRect(cx, cz, lx, lz);
           lights.push({
-            x: r.centerX,
-            y: levelData.environment.ceilingHeight - 0.06,
-            z: r.centerZ,
+            x: r.centerX + jx,
+            y: levelData.environment.ceilingHeight - 0.04,
+            z: r.centerZ + jz,
+            rotY,
+            flickerPhase: ((lx * 7 + lz * 13) % 17) * 0.37,
+          });
+        }
+      }
+    } else {
+      const targetLights = 4 + (chunkHash % 3); // 4-6 lights irregularly scattered
+      for (const [lx, lz] of lightCandidates) {
+        if (lights.length >= targetLights) break;
+        const p = hashCoords(seedNum, "l0_lt", cx * CHUNK_CELLS + lx, cz * CHUNK_CELLS + lz, 9) % 100;
+        if (p < 14) {
+          const r = cellWorldRect(cx, cz, lx, lz);
+          lights.push({
+            x: r.centerX + (rng() - 0.5) * 0.55,
+            y: levelData.environment.ceilingHeight - 0.04,
+            z: r.centerZ + (rng() - 0.5) * 0.55,
+            rotY: rng() < 0.35 ? Math.PI * 0.5 : 0,
             flickerPhase: ((lx * 7 + lz * 13 + Math.abs(cx + cz)) % 17) * 0.37,
+          });
+        }
+      }
+      if (lights.length < 3) {
+        for (const [lx, lz] of lightCandidates.slice(0, 3 - lights.length)) {
+          const r = cellWorldRect(cx, cz, lx, lz);
+          lights.push({
+            x: r.centerX,
+            y: levelData.environment.ceilingHeight - 0.04,
+            z: r.centerZ,
+            rotY: rng() < 0.35 ? Math.PI * 0.5 : 0,
+            flickerPhase: ((lx + lz) % 11) * 0.4,
           });
         }
       }
     }
   } else if (levelId === "manila_room") {
-    // Cozy, intimate enclosed anomaly chamber with singular warm light
-    for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
-      for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
-        if (lx === 5 || lz === 5) {
-          grid[lz][lx] = CELL_TYPES.MANILA_WALL;
-          wallStyles[lz][lx] = "manila_wall";
-        }
-      }
-    }
-    if (cx === -1 && cz === 0) {
-      for (let lz = 0; lz <= 4; lz += 1) {
-        grid[lz][6] = CELL_TYPES.MANILA_WALL;
-        wallStyles[lz][6] = "manila_wall";
-      }
-    }
-    if (cx === 0 && cz === -1) {
-      for (let lx = 0; lx <= 4; lx += 1) {
-        grid[6][lx] = CELL_TYPES.MANILA_WALL;
-        wallStyles[6][lx] = "manila_wall";
-      }
-    }
-    applyCrossChunkSeams(grid, seedNum, levelId, cx, cz);
-
+    // Hermetically sealed 9m x 9m (x in [0,9], z in [0,9]) anomaly room inside Level 0.
+    // East/South walls at lx=3, lz=3 leave lx=7 & lz=7 open for cross-chunk seam compatibility
+    // while West/North/Corner enclosing walls in (-1,0), (0,-1), (-1,-1) seal x=0 & z=0.
     if (cx === 0 && cz === 0) {
-      for (let lz = 0; lz <= 4; lz += 1) {
-        for (let lx = 0; lx <= 4; lx += 1) {
+      for (let lz = 0; lz <= 2; lz += 1) {
+        for (let lx = 0; lx <= 2; lx += 1) {
           grid[lz][lx] = CELL_TYPES.EMPTY;
         }
       }
-      grid[5][5] = CELL_TYPES.MANILA_WALL;
-      wallStyles[5][5] = "manila_wall";
-      grid[3][4] = CELL_TYPES.DOOR;
-      grid[4][1] = CELL_TYPES.DOOR;
+      for (let i = 0; i <= 3; i += 1) {
+        grid[i][3] = CELL_TYPES.MANILA_WALL;
+        wallStyles[i][3] = "manila_wall";
+        grid[3][i] = CELL_TYPES.MANILA_WALL;
+        wallStyles[3][i] = "manila_wall";
+      }
 
-      const restRect = cellWorldRect(cx, cz, 4, 3);
+      const restRect = cellWorldRect(cx, cz, 1, 1);
       interactables.push({
         id: "manila_rest_anchor",
-        type: "MANILA_REST",
+        type: "MANILA_REST_ZONE",
         triggerType: "MANILA_REST",
-        label: "マニラ室で休息して脱出 → Level 1 / 2 (Eキー)",
+        label: "マニラ室で静かに留まる／休息する → Level 1 / 2 (Eキー、または30秒滞在)",
         x: restRect.centerX,
         z: restRect.centerZ,
-        lx: 4,
-        lz: 3,
+        lx: 1,
+        lz: 1,
         context: {},
       });
-      const backRect = cellWorldRect(cx, cz, 1, 4);
       interactables.push({
         id: "manila_back_l0",
         type: "EXIT_DOOR",
         triggerType: "EXIT_DOOR",
         label: "黄色い廊下へ戻る → Level 0 (Eキー)",
-        x: backRect.centerX,
-        z: backRect.centerZ,
+        x: 4.5,
+        z: 8.85,
         lx: 1,
-        lz: 4,
+        lz: 2,
         context: { targetLevelId: "level_0" },
       });
 
-      const tbl = cellWorldRect(cx, cz, 3, 2);
-      props.push({ kind: "REST_TABLE", x: tbl.centerX, z: tbl.centerZ });
-      const outlet = cellWorldRect(cx, cz, 4, 1);
-      props.push({ kind: "WALL_OUTLET", x: outlet.maxX + 2.97, z: outlet.centerZ, rotY: Math.PI / 2 });
+      // Outlet flush on interior East wall (x=9.0, facing -X)
+      props.push({ kind: "WALL_OUTLET", x: 8.98, z: 4.5, rotY: -Math.PI / 2 });
 
       // Strictly ONE singular dull orange overhead fixture inside the Manila Room
       lights.push({
         x: 4.5,
-        y: levelData.environment.ceilingHeight - 0.1,
+        y: levelData.environment.ceilingHeight - 0.08,
         z: 4.5,
+        rotY: 0,
         flickerPhase: 0.42,
       });
-    } else {
-      const r = cellWorldRect(cx, cz, 3, 3);
-      lights.push({
-        x: r.centerX,
-        y: levelData.environment.ceilingHeight - 0.1,
-        z: r.centerZ,
-        flickerPhase: 0.9,
-      });
+    } else if (cx === -1 && cz === 0) {
+      for (let lz = 0; lz <= 3; lz += 1) {
+        grid[lz][7] = CELL_TYPES.MANILA_WALL;
+        wallStyles[lz][7] = "manila_wall";
+      }
+    } else if (cx === 0 && cz === -1) {
+      for (let lx = 0; lx <= 3; lx += 1) {
+        grid[7][lx] = CELL_TYPES.MANILA_WALL;
+        wallStyles[7][lx] = "manila_wall";
+      }
+    } else if (cx === -1 && cz === -1) {
+      grid[7][7] = CELL_TYPES.MANILA_WALL;
+      wallStyles[7][7] = "manila_wall";
     }
   } else if (levelId === "level_1") {
     // Wide concrete parking deck with structural pillars, curbs, arrows, ramps & puddles
@@ -451,14 +492,17 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
       }
       grid[5][5] = CELL_TYPES.PILLAR;
       wallStyles[5][5] = "parking_pillar";
+      grid[5][4] = CELL_TYPES.WALL;
+      wallStyles[5][4] = "solid";
       grid[1][3] = CELL_TYPES.CAR;
       grid[5][2] = CELL_TYPES.STAIRS;
       grid[2][5] = CELL_TYPES.STAIRS;
       grid[4][4] = CELL_TYPES.KEY_PEDESTAL;
       grid[4][6] = CELL_TYPES.OUTLET_WALL;
       wallStyles[4][6] = "solid";
-      grid[3][3] = CELL_TYPES.PUDDLE;
       grid[2][3] = CELL_TYPES.PUDDLE;
+      grid[3][3] = CELL_TYPES.PUDDLE;
+      grid[4][2] = CELL_TYPES.PUDDLE;
 
       const s0 = cellWorldRect(cx, cz, 2, 5);
       interactables.push({
@@ -504,7 +548,7 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         id: "l1_outlet_noclip",
         type: "OUTLET_WALL",
         triggerType: "OUTLET_NOCLIP",
-        label: "コンセント付き壁面 (Nキーでノークリップ)",
+        label: "コンセント付き壁面 (Nキー: Wiki上Level 188候補／試作版は隣接階層へ)",
         x: outRect.centerX,
         z: outRect.centerZ,
         lx: 6,
@@ -515,14 +559,46 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
       // Fake Exit sign above blank wall & sloped parking ramp (File:Level 1.jpg & lore)
       props.push({ kind: "FAKE_EXIT_SIGN", x: outRect.centerX, z: outRect.minZ - 0.04 });
       props.push({ kind: "PARKING_RAMP", x: 4.5, z: 21.0 });
+
+      // Decorative Warehouse wood door (North face) & jet-black Maintenance Hall door (South face)
+      const subWall = cellWorldRect(cx, cz, 4, 5);
+      props.push({ kind: "WAREHOUSE_DOOR", x: subWall.centerX, z: subWall.minZ - 0.05, rotY: Math.PI });
+      props.push({ kind: "MAINT_DOOR", x: subWall.centerX, z: subWall.maxZ + 0.05, rotY: 0 });
+
+      // Protruding rusty rebar near structural concrete bases
+      props.push({ kind: "REBAR_CLUSTER", x: 6.1, z: 16.5, rotY: 0.4 });
+      props.push({ kind: "REBAR_CLUSTER", x: 15.1, z: 16.4, rotY: 1.9 });
     } else if (cx === 1 && cz === 0) {
       for (let lz = 2; lz <= 4; lz += 1) {
         for (let lx = 1; lx <= 6; lx += 1) {
           grid[lz][lx] = CELL_TYPES.EMPTY;
         }
       }
+      grid[3][3] = CELL_TYPES.WALL;
+      wallStyles[3][3] = "solid";
       grid[3][2] = CELL_TYPES.DOOR;
       grid[3][5] = CELL_TYPES.DOOR;
+
+      const arrLeft = cellWorldRect(cx, cz, 1, 2);
+      const arrRight = cellWorldRect(cx, cz, 2, 4);
+      props.push({ kind: "FLOOR_ARROW", x: arrLeft.centerX, z: arrLeft.centerZ, rotY: Math.PI * 0.5 });
+      props.push({ kind: "FLOOR_ARROW", x: arrRight.centerX, z: arrRight.centerZ, rotY: 0 });
+
+      const hintRect = cellWorldRect(cx, cz, 1, 4);
+      interactables.push({
+        id: "l1_hub_stairs_note",
+        type: "STAIRS",
+        triggerType: "LORE_HINT",
+        label: "Hub手順: 階段2階分往復→左→右の分岐→Door[B]→Door[A] (Eキーで確認)",
+        x: hintRect.centerX,
+        z: hintRect.centerZ,
+        lx: 1,
+        lz: 4,
+        context: {
+          msg: "Wiki準拠ルート: 階段を2階分上ってすぐ下り、分岐を左→右へ進んだ先の Door [B] を通ってから Door [A] を起動します。",
+        },
+      });
+
       const bRect = cellWorldRect(cx, cz, 2, 3);
       const aRect = cellWorldRect(cx, cz, 5, 3);
       interactables.push({
@@ -563,6 +639,39 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
       });
     }
 
+    // Emit concrete-floor Hydrolitis & False Puddle meshes, scattered rebar, and sub-area doors
+    for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
+      for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
+        const cell = grid[lz][lx];
+        if (cell === CELL_TYPES.PUDDLE) {
+          const r = cellWorldRect(cx, cz, lx, lz);
+          const isOriginNormal = cx === 0 && cz === 0 && ((lx === 3 && lz === 2) || (lx === 2 && lz === 4));
+          const isOriginFalse = cx === 0 && cz === 0 && lx === 3 && lz === 3;
+          const isFalsePuddle = isOriginFalse ? true : isOriginNormal ? false : rng() < 0.24;
+          props.push({
+            kind: "PUDDLE",
+            x: r.centerX,
+            z: r.centerZ,
+            radius: 1.05 + rng() * 0.7,
+            isFalsePuddle,
+          });
+        } else if (cell === CELL_TYPES.WALL && wallStyles[lz][lx] === "solid" && !(cx === 0 && cz === 0 && lx === 4 && lz === 5)) {
+          if (lz > 0 && !SOLID_CELL_TYPES.has(grid[lz - 1][lx]) && rng() < 0.45) {
+            const r = cellWorldRect(cx, cz, lx, lz);
+            props.push({
+              kind: rng() < 0.5 ? "MAINT_DOOR" : "WAREHOUSE_DOOR",
+              x: r.centerX,
+              z: r.minZ - 0.05,
+              rotY: Math.PI,
+            });
+          }
+        } else if (!SOLID_CELL_TYPES.has(cell) && cell !== CELL_TYPES.PUDDLE && cell !== CELL_TYPES.STAIRS && rng() < 0.05) {
+          const r = cellWorldRect(cx, cz, lx, lz);
+          props.push({ kind: "REBAR_CLUSTER", x: r.centerX + 0.7, z: r.centerZ - 0.7, rotY: rng() * Math.PI * 2 });
+        }
+      }
+    }
+
     // Parking bay yellow wheel stops, floor directional arrows, orange barriers, ceiling beams & pipes
     for (const lx of [2, 6]) {
       const rStop = cellWorldRect(cx, cz, lx, 3);
@@ -588,6 +697,7 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
           x: r.centerX,
           y: levelData.environment.ceilingHeight - 0.14,
           z: r.centerZ,
+          rotY: 0,
           flickerPhase: ((lx * 5 + lz * 11) % 13) * 0.4,
         });
       }
@@ -640,16 +750,32 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
       });
       props.push({ kind: "SIDEWALK_CURB", x: chunkOriginX + 12.0, z: chunkOriginZ + 1.15, length: CHUNK_WORLD_SIZE, width: 2.3, axis: "x" });
       props.push({ kind: "SIDEWALK_CURB", x: chunkOriginX + 12.0, z: chunkOriginZ + 10.85, length: CHUNK_WORLD_SIZE, width: 2.3, axis: "x" });
+      props.push({ kind: "OVERHEAD_PIPE", x: chunkOriginX + 12.0, z: chunkOriginZ + 4.8, y: 5.55, length: CHUNK_WORLD_SIZE, axis: "x" });
+      props.push({ kind: "OVERHEAD_PIPE", x: chunkOriginX + 12.0, z: chunkOriginZ + 7.2, y: 5.55, length: CHUNK_WORLD_SIZE, axis: "x" });
+      props.push({ kind: "LIGHT_TRACK", x: chunkOriginX + 12.0, z: chunkOriginZ + 4.1, y: 5.48, length: CHUNK_WORLD_SIZE, axis: "x" });
+      props.push({ kind: "LIGHT_TRACK", x: chunkOriginX + 12.0, z: chunkOriginZ + 7.9, y: 5.48, length: CHUNK_WORLD_SIZE, axis: "x" });
       props.push({ kind: "TRAFFIC_GANTRY", x: chunkOriginX + 12.0, z: chunkOriginZ + 6.0, axis: "x" });
       props.push({ kind: "VENT_FAN", x: chunkOriginX + 18.0, z: chunkOriginZ + 4.7, y: 5.2, axis: "x" });
       props.push({ kind: "VENT_FAN", x: chunkOriginX + 18.0, z: chunkOriginZ + 7.3, y: 5.2, axis: "x" });
       props.push({ kind: "BLUE_TUNNEL_SIGN", x: chunkOriginX + 9.0, z: chunkOriginZ + 0.35, axis: "x" });
 
+      for (const alx of [1, 5]) {
+        const ax = chunkOriginX + (alx + 0.5) * CELL_SIZE;
+        props.push({ kind: "WALL_ALCOVE", x: ax, z: chunkOriginZ + 0.14, rotY: 0 });
+        props.push({ kind: "WALL_ALCOVE", x: ax, z: chunkOriginZ + 11.86, rotY: Math.PI });
+      }
+      if (cx === 0 && cz === 0) {
+        props.push({ kind: "WALL_TV", x: chunkOriginX + 15.0, z: chunkOriginZ + 0.55, rotY: 0 });
+        props.push({ kind: "WALL_TV", x: chunkOriginX + 21.0, z: chunkOriginZ + 11.45, rotY: Math.PI });
+      } else if (chunkHash % 2 === 0) {
+        props.push({ kind: "WALL_TV", x: chunkOriginX + 12.0, z: chunkOriginZ + 0.55, rotY: 0 });
+      }
+
       // Twin orange-yellow overhead arch lighting rows
       for (const lx of [1, 4, 6]) {
         const px = chunkOriginX + (lx + 0.5) * CELL_SIZE;
-        lights.push({ x: px, y: 5.4, z: chunkOriginZ + 4.1, flickerPhase: lx * 0.3 });
-        lights.push({ x: px, y: 5.4, z: chunkOriginZ + 7.9, flickerPhase: lx * 0.5 });
+        lights.push({ x: px, y: 5.4, z: chunkOriginZ + 4.1, rotY: 0, flickerPhase: lx * 0.3 });
+        lights.push({ x: px, y: 5.4, z: chunkOriginZ + 7.9, rotY: 0, flickerPhase: lx * 0.5 });
       }
     } else if (isCrossNSTunnel) {
       props.push({
@@ -668,11 +794,18 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         width: 7.4,
         axis: "z",
       });
+      props.push({ kind: "OVERHEAD_PIPE", x: chunkOriginX + 10.8, z: chunkOriginZ + 12.0, y: 5.55, length: CHUNK_WORLD_SIZE, axis: "z" });
+      props.push({ kind: "OVERHEAD_PIPE", x: chunkOriginX + 13.2, z: chunkOriginZ + 12.0, y: 5.55, length: CHUNK_WORLD_SIZE, axis: "z" });
+      props.push({ kind: "LIGHT_TRACK", x: chunkOriginX + 10.1, z: chunkOriginZ + 12.0, y: 5.48, length: CHUNK_WORLD_SIZE, axis: "z" });
+      props.push({ kind: "LIGHT_TRACK", x: chunkOriginX + 13.9, z: chunkOriginZ + 12.0, y: 5.48, length: CHUNK_WORLD_SIZE, axis: "z" });
       props.push({ kind: "TRAFFIC_GANTRY", x: chunkOriginX + 12.0, z: chunkOriginZ + 12.0, axis: "z" });
-      lights.push({ x: chunkOriginX + 10.1, y: 5.4, z: chunkOriginZ + 12.0, flickerPhase: 0.4 });
-      lights.push({ x: chunkOriginX + 13.9, y: 5.4, z: chunkOriginZ + 12.0, flickerPhase: 0.7 });
+      if (chunkHash % 3 === 0) {
+        props.push({ kind: "WALL_TV", x: chunkOriginX + 6.55, z: chunkOriginZ + 15.0, rotY: Math.PI / 2 });
+      }
+      lights.push({ x: chunkOriginX + 10.1, y: 5.4, z: chunkOriginZ + 12.0, rotY: 0, flickerPhase: 0.4 });
+      lights.push({ x: chunkOriginX + 13.9, y: 5.4, z: chunkOriginZ + 12.0, rotY: 0, flickerPhase: 0.7 });
     } else {
-      lights.push({ x: chunkOriginX + 12.0, y: 5.0, z: chunkOriginZ + 12.0, flickerPhase: 0.2 });
+      lights.push({ x: chunkOriginX + 12.0, y: 5.0, z: chunkOriginZ + 12.0, rotY: 0, flickerPhase: 0.2 });
     }
 
     if (cx === 0 && cz === 0) {
@@ -691,9 +824,9 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         id: "hub_key_pedestal",
         type: "KEY_PICKUP",
         triggerType: "PICKUP_KEY",
-        label: "Object 2: Level Key 保管棚から取得 (Eキー)",
+        label: "紛失された Object 2: Level Key を拾う (Eキー)",
         x: kRect.centerX,
-        z: kRect.centerZ,
+        z: chunkOriginZ + 0.72,
         lx: 2,
         lz: 0,
         context: {},
@@ -704,7 +837,7 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         id: "hub_door_level_0",
         type: "HUB_LEVEL_DOOR",
         triggerType: "HUB_DOOR",
-        label: "金属扉 [Level 0: 黄色紋章] (Level Key必要 - Eキー)",
+        label: "金属扉 [Level 0: 淡黄色扉] (Level Key必要 - Eキー)",
         x: d0.centerX,
         z: d0.minZ + 0.55,
         lx: 5,
@@ -717,7 +850,7 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         id: "hub_door_level_1",
         type: "HUB_LEVEL_DOOR",
         triggerType: "HUB_DOOR",
-        label: "金属扉 [Level 1: 灰色コンクリート] (Level Key必要 - Eキー)",
+        label: "金属扉 [Level 1: 灰色鉄扉] (Level Key必要 - Eキー)",
         x: d1.centerX,
         z: d1.maxZ - 0.55,
         lx: 6,
@@ -730,35 +863,57 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         id: "hub_door_level_2",
         type: "HUB_LEVEL_DOOR",
         triggerType: "HUB_DOOR",
-        label: "金属扉 [Level 2: 錆配管紋章] (Level Key必要 - Eキー)",
+        label: "金属扉 [Level 2: 暗鉄鋼扉] (Level Key必要 - Eキー)",
         x: d2.centerX,
         z: d2.maxZ - 0.55,
         lx: 3,
         lz: 3,
-        context: { targetLevelId: "level_2", doorTint: 0xb86434 },
+        context: { targetLevelId: "level_2", doorTint: 0x7c746c },
       });
     } else if (cx === 0 && cz === 1) {
-      grid[2][4] = CELL_TYPES.DOOR;
-      const dm = cellWorldRect(cx, cz, 4, 2);
+      grid[2][2] = CELL_TYPES.DOOR;
+      grid[4][5] = CELL_TYPES.DOOR;
+      const d37 = cellWorldRect(cx, cz, 2, 2);
       interactables.push({
-        id: "hub_door_manila",
-        type: "HUB_LEVEL_DOOR",
-        triggerType: "HUB_DOOR",
-        label: "金属扉 [Manila Room] (Level Key必要 - Eキー)",
-        x: dm.centerX,
-        z: dm.centerZ,
-        lx: 4,
+        id: "hub_lore_door_37",
+        type: "LORE_DOOR",
+        triggerType: "LORE_HINT",
+        label: "特注扉 [Level 37: White Tile] (試作版未実装 - Eキーで確認)",
+        x: d37.minX + 0.55,
+        z: d37.centerZ,
+        lx: 2,
         lz: 2,
-        context: { targetLevelId: "manila_room", doorTint: 0xd4a259 },
+        context: {
+          loreLevel: "level_37",
+          doorStyle: "l37_tile",
+          msg: "The Hub の Level 37 扉：白タイル彫刻デザイン（Wiki上 Sublimity への連絡路）。",
+        },
+      });
+      const d154 = cellWorldRect(cx, cz, 5, 4);
+      interactables.push({
+        id: "hub_lore_door_154",
+        type: "LORE_DOOR",
+        triggerType: "LORE_HINT",
+        label: "特注扉 [Level 154: Neon Express] (試作版未実装 - Eキーで確認)",
+        x: d154.maxX - 0.55,
+        z: d154.centerZ,
+        lx: 5,
+        lz: 4,
+        context: {
+          loreLevel: "level_154",
+          doorStyle: "l154_neon",
+          msg: "The Hub の Level 154 扉：ネオン列車駅の意匠（Wiki上 Neon Express への連絡路）。",
+        },
       });
     }
   } else if (levelId === "level_2") {
-    // Claustrophobic low-ceiling industrial maintenance shafts choked with side pipes & concrete ribs
+    // Claustrophobic low-ceiling industrial maintenance shafts: concrete walls + older wooden areas + rusted pipe tiers
     for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
       for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
-        if (rng() < 0.54) {
+        const r = rng();
+        if (r < 0.54) {
           grid[lz][lx] = CELL_TYPES.WALL;
-          wallStyles[lz][lx] = "solid";
+          wallStyles[lz][lx] = !(cx === 0 && cz === 0) && rng() < 0.16 ? "l2_wood" : "solid";
         }
       }
     }
@@ -775,10 +930,12 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         }
       }
       grid[3][3] = CELL_TYPES.WALL;
+      wallStyles[3][3] = "l2_wood";
       grid[2][5] = CELL_TYPES.DOOR;
-      grid[5][2] = CELL_TYPES.STAIRS;
-      grid[6][6] = CELL_TYPES.DOOR;
+      grid[5][2] = CELL_TYPES.DOOR;
+      grid[5][6] = CELL_TYPES.DOOR;
       grid[1][4] = CELL_TYPES.GLITCH_WALL;
+      wallStyles[1][4] = "solid";
 
       const f1 = cellWorldRect(cx, cz, 5, 2);
       interactables.push({
@@ -793,30 +950,33 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         context: { targetLevelId: "level_1" },
       });
 
-      const s0 = cellWorldRect(cx, cz, 2, 5);
+      const crawlRect = cellWorldRect(cx, cz, 2, 5);
       interactables.push({
-        id: "l2_stairs_l0",
-        type: "STAIRS",
-        triggerType: "STAIRWELL",
-        label: "保守ハッチ階段 → Level 0 (Eキー)",
-        x: s0.centerX,
-        z: s0.centerZ,
+        id: "l2_crawlspace_l1",
+        type: "CRAWLSPACE_EXIT",
+        triggerType: "EXIT_DOOR",
+        label: "狭い這い穴（帯電配線に注意） → Level 1 (Eキー)",
+        x: crawlRect.centerX,
+        z: crawlRect.centerZ,
         lx: 2,
         lz: 5,
-        context: { targetLevelId: "level_0" },
+        context: { targetLevelId: "level_1" },
       });
 
-      const fHub = cellWorldRect(cx, cz, 6, 6);
+      const phiRect = cellWorldRect(cx, cz, 6, 5);
       interactables.push({
-        id: "l2_exit_hub",
-        type: "EXIT_DOOR",
-        triggerType: "EXIT_DOOR",
-        label: "連絡通路 → The Hub (Eキー)",
-        x: fHub.centerX,
-        z: fHub.centerZ,
+        id: "l2_phi_door",
+        type: "LORE_DOOR",
+        triggerType: "LORE_HINT",
+        label: "金色の「Φ」扉 → Level Phi (試作版未実装 - Eキーで確認)",
+        x: phiRect.centerX,
+        z: phiRect.centerZ,
         lx: 6,
-        lz: 6,
-        context: { targetLevelId: "the_hub" },
+        lz: 5,
+        context: {
+          doorStyle: "gold_phi",
+          msg: "金色の「Φ」が刻まれた扉。Fandom Wiki 上は Level Phi へ通じる出口です。",
+        },
       });
 
       const gl = cellWorldRect(cx, cz, 4, 1);
@@ -824,7 +984,7 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         id: "l2_glitch_wall",
         type: "GLITCH_WALL",
         triggerType: "NOCLIP_WALL",
-        label: "不安定配管壁 (Nキーでノークリップ)",
+        label: "不安定配管壁 (Nキーでノークリップ → Level 1)",
         x: gl.centerX,
         z: gl.centerZ,
         lx: 4,
@@ -833,7 +993,7 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
       });
     }
 
-    // Add chamfered concrete shaft ribs and multi-tier side pipes along corridors
+    // Add chamfered concrete shaft ribs, multi-tier side pipes, and overhead pipes along corridors
     for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
       for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
         if (SOLID_CELL_TYPES.has(grid[lz][lx])) continue;
@@ -841,6 +1001,9 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         const axis = lx === 1 || lx === 5 ? "z" : "x";
         if ((lx + lz) % 2 === 0) {
           props.push({ kind: "CHAMFER_RIB", x: r.centerX, z: r.centerZ, axis });
+        }
+        if (lx === 1 || lx === 5 || lz === 1 || lz === 5) {
+          props.push({ kind: "OVERHEAD_PIPE", x: r.centerX + (axis === "z" ? 0.55 : 0), z: r.centerZ + (axis === "x" ? 0.55 : 0), y: 2.46, length: CELL_SIZE, axis });
         }
         const leftSolid = lx > 0 && SOLID_CELL_TYPES.has(grid[lz][lx - 1]);
         const rightSolid = lx < CHUNK_CELLS - 1 && SOLID_CELL_TYPES.has(grid[lz][lx + 1]);
@@ -861,6 +1024,7 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
       x: dimPt.centerX,
       y: levelData.environment.ceilingHeight - 0.1,
       z: dimPt.centerZ,
+      rotY: 0,
       flickerPhase: (Math.abs(cx * 3 + cz * 7) % 11) * 0.5,
     });
   }

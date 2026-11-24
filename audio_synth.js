@@ -139,15 +139,29 @@ export class BackroomsAudio {
       }
       this.activeNodes.push(lfo, lfoGain, bp, bedGain);
     } else if (levelId === "manila_room") {
-      // Soothing subdued orange lamp hum + faint wall whisper filtered noise
-      const osc = this.ctx.createOscillator();
-      const og = this.ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = 58;
-      og.gain.value = 0.14;
-      osc.connect(og);
-      og.connect(this.ambientGain);
-      osc.start(now);
+      // Subdued Level 0 fluorescent hum bed + warm orange lamp + faint wall whispers
+      const humBp = this.ctx.createBiquadFilter();
+      humBp.type = "bandpass";
+      humBp.frequency.value = 195;
+      humBp.Q.value = 1.6;
+      const humBed = this.ctx.createGain();
+      humBed.gain.value = 0.085;
+      humBp.connect(humBed);
+      humBed.connect(this.ambientGain);
+      for (const [freq, type, amp] of [
+        [60, "sawtooth", 0.36],
+        [120, "triangle", 0.28],
+      ]) {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        g.gain.value = amp;
+        osc.connect(g);
+        g.connect(humBp);
+        osc.start(now);
+        this.activeNodes.push(osc, g);
+      }
 
       const noise = this.ctx.createBufferSource();
       noise.buffer = this._createNoiseBuffer(3);
@@ -157,13 +171,13 @@ export class BackroomsAudio {
       bp.frequency.value = 950;
       bp.Q.value = 3.5;
       const ng = this.ctx.createGain();
-      ng.gain.value = 0.11;
+      ng.gain.value = 0.115;
       noise.connect(bp);
       bp.connect(ng);
       ng.connect(this.ambientGain);
       noise.start(now);
 
-      this.activeNodes.push(osc, og, noise, bp, ng);
+      this.activeNodes.push(humBp, humBed, noise, bp, ng);
     } else if (levelId === "level_1") {
       // Warehouse deep concrete HVAC drone + damp air hiss
       const osc = this.ctx.createOscillator();
@@ -369,5 +383,54 @@ export class BackroomsAudio {
       osc.start(now + idx * 0.07);
       osc.stop(now + idx * 0.07 + 0.28);
     }
+  }
+
+  playPuddleSplash() {
+    if (!this.init() || this.muted) return;
+    const now = this.ctx.currentTime;
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = this._createNoiseBuffer(0.35);
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(920, now);
+    bp.frequency.exponentialRampToValueAtTime(340, now + 0.16);
+    bp.Q.value = 1.8;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.24, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    noise.connect(bp);
+    bp.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(now);
+    noise.stop(now + 0.2);
+  }
+
+  playTremor() {
+    if (!this.init() || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(48, now);
+    osc.frequency.linearRampToValueAtTime(34, now + 2.1);
+
+    const rumble = this.ctx.createBufferSource();
+    rumble.buffer = this._createNoiseBuffer(2.3);
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 95;
+
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.01, now);
+    g.gain.linearRampToValueAtTime(0.34, now + 0.35);
+    g.gain.exponentialRampToValueAtTime(0.002, now + 2.2);
+
+    osc.connect(lp);
+    rumble.connect(lp);
+    lp.connect(g);
+    g.connect(this.sfxGain);
+    osc.start(now);
+    rumble.start(now);
+    osc.stop(now + 2.25);
+    rumble.stop(now + 2.25);
   }
 }

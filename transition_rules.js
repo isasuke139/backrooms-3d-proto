@@ -94,23 +94,23 @@ export const TRANSITION_GRAPH = Object.freeze([
     from: "level_1",
     to: ["level_2", "level_0"],
     trigger: TRIGGER_TYPES.OUTLET_NOCLIP,
-    label: "コンセント付き壁面からのノークリップ",
+    label: "コンセント付き壁面からのノークリップ（Wiki上 Level 188／試作版は隣接実装階層）",
     wikiCitation: "https://backrooms.fandom.com/wiki/Level_1#Exits",
   },
   {
     id: "HUB_KEY_DOOR",
     from: "the_hub",
-    to: ["level_0", "level_1", "level_2", "manila_room"],
+    to: ["level_0", "level_1", "level_2"],
     trigger: TRIGGER_TYPES.HUB_DOOR,
-    label: "Object 2 (Level Key) による各階層ドアの解錠遷移",
+    label: "Object 2 (Level Key) による番号付き階層ドアの解錠遷移",
     wikiCitation: "https://backrooms.fandom.com/wiki/The_Hub#Exits",
   },
   {
     id: "L2_FIRE_EXIT",
     from: "level_2",
-    to: ["level_1", "level_0", "the_hub"],
+    to: ["level_1"],
     trigger: TRIGGER_TYPES.EXIT_DOOR,
-    label: "非常口 (Fire Exit) からの帰還遷移",
+    label: "非常口 (Fire Exit) / 狭い這い穴からの Level 1 帰還遷移",
     wikiCitation: "https://backrooms.fandom.com/wiki/Level_2#Exits",
   },
 ]);
@@ -322,7 +322,7 @@ export function evaluateTransition({
         allowed: true,
         targetLevelId: target,
         ruleId: "L1_OUTLET_NOCLIP",
-        reason: `壁コンセント境界からのノークリップ → ${LEVELS[target].name}`,
+        reason: `壁コンセント境界からのノークリップ（Wiki上 Level 188 行き／試作版は ${LEVELS[target].name} へ転送）`,
         wikiCitation: "https://backrooms.fandom.com/wiki/Level_1#Exits",
         spawnPos: defaultSpawnFor(target),
         requiresKey: false,
@@ -334,6 +334,17 @@ export function evaluateTransition({
   if (currentLevelId === "the_hub") {
     if (triggerType === TRIGGER_TYPES.HUB_DOOR) {
       const target = context.targetLevelId;
+      if (target === "manila_room") {
+        return {
+          allowed: false,
+          targetLevelId: null,
+          ruleId: "HUB_NO_MANILA_DOOR",
+          reason: "Manila Room は Level 0 内部の空間異常のため The Hub に直通扉は存在しません",
+          wikiCitation: "https://backrooms.fandom.com/wiki/The_Hub#Exits",
+          spawnPos: defaultSpawnFor("the_hub"),
+          requiresKey: false,
+        };
+      }
       if (!context.hasLevelKey) {
         return {
           allowed: false,
@@ -368,7 +379,10 @@ export function evaluateTransition({
     }
     if (triggerType === TRIGGER_TYPES.NOCLIP_WALL || triggerType === TRIGGER_TYPES.EXIT_DOOR) {
       const target =
-        context.targetLevelId && LEVELS[context.targetLevelId] && context.targetLevelId !== "the_hub"
+        context.targetLevelId &&
+        LEVELS[context.targetLevelId] &&
+        context.targetLevelId !== "the_hub" &&
+        context.targetLevelId !== "manila_room"
           ? context.targetLevelId
           : "level_1";
       return {
@@ -386,29 +400,35 @@ export function evaluateTransition({
   // LEVEL 2 rules
   if (currentLevelId === "level_2") {
     if (triggerType === TRIGGER_TYPES.STAIRWELL || triggerType === TRIGGER_TYPES.EXIT_DOOR) {
-      const target = ["level_1", "level_0", "the_hub"].includes(context.targetLevelId)
-        ? context.targetLevelId
-        : "level_1";
+      if (context.targetLevelId && context.targetLevelId !== "level_1") {
+        return {
+          allowed: false,
+          targetLevelId: null,
+          ruleId: "L2_NON_CANON_EXIT",
+          reason: `Level 2 からは非公式遷移先 (${context.targetLevelId}) へは直接戻れません（Fire Exit / 這い穴 → Level 1）`,
+          wikiCitation: "https://backrooms.fandom.com/wiki/Level_2#Exits",
+          spawnPos: defaultSpawnFor("level_2"),
+          requiresKey: false,
+        };
+      }
       return {
         allowed: true,
-        targetLevelId: target,
+        targetLevelId: "level_1",
         ruleId: "L2_FIRE_EXIT",
-        reason: `非常口から ${LEVELS[target].name} へ帰還`,
+        reason: `非常口 / 狭い這い穴から ${LEVELS.level_1.name} へ帰還`,
         wikiCitation: "https://backrooms.fandom.com/wiki/Level_2#Exits",
-        spawnPos: defaultSpawnFor(target),
+        spawnPos: defaultSpawnFor("level_1"),
         requiresKey: false,
       };
     }
     if (triggerType === TRIGGER_TYPES.NOCLIP_WALL) {
-      const roll = deterministicRoll(worldSeed, "l2_noclip", cx, cz);
-      const target = roll < 0.55 ? "level_1" : roll < 0.8 ? "level_0" : "the_hub";
       return {
         allowed: true,
-        targetLevelId: target,
+        targetLevelId: "level_1",
         ruleId: "L2_NOCLIP",
-        reason: `保守管路壁面からのノークリップ → ${LEVELS[target].name}`,
+        reason: `保守管路壁面からのノークリップ → ${LEVELS.level_1.name}`,
         wikiCitation: "https://backrooms.fandom.com/wiki/Level_2#Exits",
-        spawnPos: defaultSpawnFor(target),
+        spawnPos: defaultSpawnFor("level_1"),
         requiresKey: false,
       };
     }
