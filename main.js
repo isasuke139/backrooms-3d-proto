@@ -518,7 +518,7 @@ class LevelMaterialCache {
       const isSinglePanel =
         slot === "accent" || (slot === "door" && levelId !== "level_0");
       const repeat =
-        slot === "floor" && levelId === "the_hub"
+        slot === "floor" && (levelId === "the_hub" || levelId === "level_1")
           ? [10, 10]
           : slot === "floor" || slot === "ceiling"
             ? [8, 8]
@@ -535,7 +535,14 @@ class LevelMaterialCache {
         map: procTex,
         roughness: slot === "floor" ? 0.88 : slot === "door" ? 0.45 : 0.85,
         metalness: slot === "door" && levelId !== "level_0" ? 0.62 : 0.05,
-        envMapIntensity: slot === "door" ? 0.9 : levelId === "the_hub" && slot === "floor" ? 1.15 : 0.45,
+        envMapIntensity:
+          slot === "door"
+            ? 0.9
+            : levelId === "the_hub" && slot === "floor"
+              ? 1.15
+              : levelId === "level_1" && slot === "floor"
+                ? 1.05
+                : 0.45,
       });
       if (spec?.normalScale) {
         mat.normalScale = new THREE.Vector2(spec.normalScale, spec.normalScale);
@@ -1751,6 +1758,15 @@ function buildChunkGroup(chunkData) {
         rx: Math.PI / 4,
         rz: Math.PI / 2,
         receiveShadow: true,
+      });
+    } else if (prop.kind === "PARKING_LINE") {
+      batch.add(SHARED_GEOS.plane, s.roadLineMat, {
+        x: prop.x,
+        y: 0.011,
+        z: prop.z,
+        rx: -Math.PI / 2,
+        sx: prop.w,
+        sy: prop.d,
       });
     } else if (prop.kind === "FLOOR_ARROW") {
       batch.add(SHARED_GEOS.plane, s.hazardYellowMat, {

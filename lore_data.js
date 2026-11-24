@@ -264,7 +264,7 @@ export const LEVELS = Object.freeze({
       temperatureC: 27.0,
       humidity: "High humidity fog from Hydrolitis puddles (27-50C)",
       description:
-        "2,000階層に及ぶ巨大コンクリート駐車場と倉庫の融合空間。無銘の故障車、階数を示す柱、Hydrolitis水たまりと偽水たまり（False Puddles）、突き出た錆鉄筋、給電可能な壁コンセント、突発停電（Blackout）が発生する。",
+        "2,000階層に及ぶ巨大コンクリート・アスファルト駐車場と倉庫の融合空間。暗いアスファルト路面上に無銘の故障車、階数を示す柱、Hydrolitis水たまりと偽水たまり（False Puddles）、突き出た錆鉄筋、給電可能な壁コンセント、突発停電（Blackout）が発生する。",
     },
     textures: {
       wall: {
@@ -283,7 +283,7 @@ export const LEVELS = Object.freeze({
         bundledPath: "./assets/textures/tex_l1_parking_floor.jpg",
         normalPath: "./assets/textures/tex_l1_parking_floor_nrm.jpg",
         roughnessPath: "./assets/textures/tex_l1_parking_floor_rgh.jpg",
-        normalScale: 0.9,
+        normalScale: 1.3,
         aiRegenerated: true,
         proceduralStyle: "level1_asphalt",
       },
@@ -335,7 +335,7 @@ export const LEVELS = Object.freeze({
       },
     ],
     ambientLogs: [
-      "[LEVEL 1] 天井高4.6mの荒れたコンクリート駐車場。Hydrolitis水たまりの湿気霧と突き出し鉄筋に注意。",
+      "[LEVEL 1] 天井高4.6mの暗いアスファルト駐車場・倉庫。Hydrolitis水たまりの湿気霧と突き出し鉄筋に注意。",
       "[HAZARD] 濁った水たまりは False Puddle（深さ1.5〜3.6mの歯付き捕食穴）の可能性があります。",
       "[BLACKOUT] 突発停電が発生すると Smilers が活動します。懐中電灯 (F) を確保してください。",
       "[HUB ROUTE] 階段2階分往復→分岐を左→右→Door [B] 通過後に反対側の Door [A] で The Hub へ到達。",

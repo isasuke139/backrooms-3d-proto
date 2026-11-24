@@ -15,10 +15,10 @@ import { getLevelData } from "./lore_data.js";
 export const CHUNK_CELLS = 8;
 export const CELL_SIZE = 3.0;
 export const CHUNK_WORLD_SIZE = CHUNK_CELLS * CELL_SIZE; // 24.0 meters
-export const L0_SUB_CELLS = 12;
-export const L0_SUB_SIZE = CHUNK_WORLD_SIZE / L0_SUB_CELLS; // 2.0 meters
+export const L0_SUB_CELLS = 8;
+export const L0_SUB_SIZE = CHUNK_WORLD_SIZE / L0_SUB_CELLS; // 3.0 meters
 export const L0_WALL_THICK = 0.24;
-export const L0_SUB_FOR_MACRO = Object.freeze({ 1: 2, 2: 3, 3: 5, 4: 6, 5: 8, 6: 9 });
+export const L0_SUB_FOR_MACRO = Object.freeze({ 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 });
 
 export const CELL_TYPES = Object.freeze({
   EMPTY: "EMPTY",
@@ -314,13 +314,13 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
   const isManilaChunk = !isOrigin && ((cx === 1 && cz === 0) || hashCoords(seedNum, "level_0", cx, cz, 0) % 13 === 0);
 
   if (isOrigin) {
-    // Spawn (1.5, 1.5) sits inside sub-cell (0,0) with guaranteed > 0.53m clearance
+    // Spawn (1.5, 1.5) sits dead-center inside 3.0m sub-cell (0,0)
     openSubEdge(0, 0, "E");
     openSubEdge(0, 0, "S");
 
     grid[5][2] = CELL_TYPES.STAIRS;
-    openSubEdge(3, 8, "E");
-    openSubEdge(3, 7, "S");
+    openSubEdge(2, 5, "W");
+    openSubEdge(2, 5, "S");
     landmarkBoxes.push({
       minX: originX + 6.2,
       maxX: originX + 8.8,
@@ -343,24 +343,20 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
     if (isInitialOrigin) {
       // Collision test block (lx=3, lz=3 -> [9..12, 9..12]) + unobstructed West/North approach
       pushMacroWall(3, 3, CELL_TYPES.WALL, "solid");
-      blocked[5][5] = true;
-      openSubEdge(3, 4, "E");
-      openSubEdge(3, 5, "E");
-      openSubEdge(3, 4, "S");
-      openSubEdge(4, 4, "S");
-      openSubEdge(4, 3, "S");
-      openSubEdge(5, 3, "S");
+      blocked[3][3] = true;
+      openSubEdge(2, 3, "N");
+      openSubEdge(2, 3, "W");
+      openSubEdge(2, 2, "E");
       landmarkBoxes.push({
-        minX: originX + 8.15,
-        maxX: originX + 12.02,
-        minZ: originZ + 8.15,
-        maxZ: originZ + 12.02,
+        minX: originX + 9.0,
+        maxX: originX + 12.0,
+        minZ: originZ + 9.0,
+        maxZ: originZ + 12.0,
       });
 
       // Glitch Wall (5,1) & Outlet Wall (6,6)
       pushMacroWall(5, 1, CELL_TYPES.GLITCH_WALL, "solid");
-      blocked[1][8] = true;
-      blocked[2][8] = true;
+      blocked[1][5] = true;
       landmarkBoxes.push({
         minX: originX + 15.0,
         maxX: originX + 18.0,
@@ -381,7 +377,7 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
       });
 
       pushMacroWall(6, 6, CELL_TYPES.OUTLET_WALL, "solid");
-      blocked[9][9] = true;
+      blocked[6][6] = true;
       landmarkBoxes.push({
         minX: originX + 18.0,
         maxX: originX + 21.0,
@@ -401,19 +397,15 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
         }
       }
     }
-    for (let sz = 4; sz <= 8; sz += 1) {
-      for (let sx = 4; sx <= 8; sx += 1) {
+    for (let sz = 3; sz <= 5; sz += 1) {
+      for (let sx = 3; sx <= 5; sx += 1) {
         blocked[sz][sx] = true;
       }
     }
-    blocked[6][4] = false;
-    blocked[6][5] = false;
-    blocked[6][6] = false;
-    blocked[6][7] = false;
-    openSubEdge(3, 6, "E");
-    openSubEdge(4, 6, "E");
-    openSubEdge(5, 6, "E");
-    openSubEdge(6, 6, "E");
+    blocked[4][3] = false;
+    blocked[4][4] = false;
+    openSubEdge(2, 4, "E");
+    openSubEdge(3, 4, "E");
     landmarkBoxes.push({
       minX: originX + 9.0,
       maxX: originX + 18.0,
@@ -434,7 +426,7 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
     });
   } else if (chunkHash % 5 === 0) {
     pushMacroWall(4, 3, CELL_TYPES.GLITCH_WALL, "solid");
-    blocked[5][6] = true;
+    blocked[3][4] = true;
     landmarkBoxes.push({
       minX: originX + 12.0,
       maxX: originX + 15.0,
@@ -455,7 +447,7 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
     });
   }
 
-  // Carve turn-biased Growing-Tree spanning labyrinth on unblocked 12x12 sub-cells
+  // Carve turn-biased Growing-Tree spanning labyrinth on unblocked 8x8 sub-cells (2.76m clear corridors)
   const visitedSub = Array.from({ length: N }, () => Array(N).fill(false));
   const runGrowingTreeFrom = (startX, startZ) => {
     if (blocked[startZ][startX] || visitedSub[startZ][startX]) return;
@@ -472,7 +464,7 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
         if (blocked[nz][nx] || visitedSub[nz][nx]) continue;
         const hasPrev = cur.dx !== 0 || cur.dz !== 0;
         const sameDir = hasPrev && dx === cur.dx && dz === cur.dz;
-        const weight = sameDir ? (cur.straightRun >= 2 ? 0.06 : 1.0) : 4.8;
+        const weight = sameDir ? (cur.straightRun >= 2 ? 0.05 : 0.65) : 5.2;
         cand.push({ nx, nz, dx, dz, dir, sameDir, weight });
       }
       if (cand.length === 0) {
@@ -501,8 +493,8 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
     }
   };
 
-  let rootSx = isOrigin ? 0 : isManilaChunk ? 3 : 1 + (chunkHash % 9);
-  let rootSz = isOrigin ? 0 : isManilaChunk ? 6 : 1 + ((chunkHash >>> 4) % 9);
+  let rootSx = isOrigin ? 0 : isManilaChunk ? 2 : 1 + (chunkHash % 6);
+  let rootSz = isOrigin ? 0 : isManilaChunk ? 4 : 1 + ((chunkHash >>> 4) % 6);
   if (blocked[rootSz][rootSx]) {
     rootSx = 0;
     rootSz = 0;
@@ -530,7 +522,7 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
     }
   }
 
-  // Subtle micro-loops (3-4) between distant branches so dead ends stay high (20-35/chunk)
+  // Subtle micro-loops (1-2) between distant branches so dead ends stay authentic
   const subDist = Array.from({ length: N }, () => Array(N).fill(-1));
   const bfsQ = [[rootSx, rootSz]];
   subDist[rootSz][rootSx] = 0;
@@ -557,29 +549,29 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
   for (let sz = 1; sz < N - 1; sz += 1) {
     for (let sx = 1; sx < N - 1; sx += 1) {
       if (blocked[sz][sx]) continue;
-      if (!blocked[sz][sx + 1] && wallE[sz][sx] && Math.abs(subDist[sz][sx] - subDist[sz][sx + 1]) >= 8) {
+      if (!blocked[sz][sx + 1] && wallE[sz][sx] && Math.abs(subDist[sz][sx] - subDist[sz][sx + 1]) >= 6) {
         const mx = originX + (sx + 1) * L0_SUB_SIZE;
         const mz = originZ + (sz + 0.5) * L0_SUB_SIZE;
         if (!isInsideLandmark(mx, mz)) loopCand.push({ sx, sz, dir: "E" });
       }
-      if (!blocked[sz + 1][sx] && wallS[sz][sx] && Math.abs(subDist[sz][sx] - subDist[sz + 1][sx]) >= 8) {
+      if (!blocked[sz + 1][sx] && wallS[sz][sx] && Math.abs(subDist[sz][sx] - subDist[sz + 1][sx]) >= 6) {
         const mx = originX + (sx + 0.5) * L0_SUB_SIZE;
         const mz = originZ + (sz + 1) * L0_SUB_SIZE;
         if (!isInsideLandmark(mx, mz)) loopCand.push({ sx, sz, dir: "S" });
       }
     }
   }
-  const targetLoops = Math.min(loopCand.length, 3 + (chunkHash % 2));
+  const targetLoops = Math.min(loopCand.length, 1 + (chunkHash % 2));
   for (let i = 0; i < targetLoops; i += 1) {
     const pick = loopCand[(i * 7 + (chunkHash >>> 3)) % loopCand.length];
     openSubEdge(pick.sx, pick.sz, pick.dir);
   }
 
-  // Carve 1 small asymmetric 2x2 chamber (4m x 4m) + optional central square column
+  // Carve 1 small asymmetric 2x2 chamber (6m x 6m) + optional central square column
   let chamberCenter = null;
   for (let tryIdx = 0; tryIdx < 64; tryIdx += 1) {
-    const cx0 = 1 + ((tryIdx * 3 + (chunkHash % 9)) % 9);
-    const cz0 = 1 + ((tryIdx * 5 + ((chunkHash >>> 5) % 9)) % 9);
+    const cx0 = 1 + ((tryIdx * 3 + (chunkHash % 5)) % 5);
+    const cz0 = 1 + ((tryIdx * 5 + ((chunkHash >>> 5) % 5)) % 5);
     const four = [
       [cx0, cz0],
       [cx0 + 1, cz0],
@@ -610,7 +602,7 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
   }
 
   if (chamberCenter && (isInitialOrigin || chunkHash % 2 === 0)) {
-    const halfP = 0.36;
+    const halfP = 0.39;
     const pLx = Math.min(CHUNK_CELLS - 1, Math.max(0, Math.floor((chamberCenter.x - originX) / CELL_SIZE)));
     const pLz = Math.min(CHUNK_CELLS - 1, Math.max(0, Math.floor((chamberCenter.z - originZ) / CELL_SIZE)));
     walls.push({
@@ -626,17 +618,17 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
       height: ceilH,
     });
   } else if (isInitialOrigin) {
-    // Fallback pillar inside (0,0) if no chamber fit
+    // Fallback pillar centered inside sub-cell (6,2) if no chamber fit
     walls.push({
       lx: 6,
       lz: 2,
       cellType: CELL_TYPES.PILLAR,
       wallStyle: "l0_pillar",
       zoneLabel: null,
-      minX: originX + 18.64,
-      maxX: originX + 19.36,
-      minZ: originZ + 7.64,
-      maxZ: originZ + 8.36,
+      minX: originX + 18.61,
+      maxX: originX + 19.39,
+      minZ: originZ + 6.61,
+      maxZ: originZ + 7.39,
       height: ceilH,
     });
   }
@@ -1209,12 +1201,26 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
       }
     }
 
-    // Parking bay yellow wheel stops, floor directional arrows, orange barriers, ceiling beams & pipes
+    // Parking bay yellow wheel stops, floor directional arrows, white asphalt stall lines, orange barriers, ceiling beams & pipes
+    const baseChunkX = cx * CHUNK_WORLD_SIZE;
+    const baseChunkZ = cz * CHUNK_WORLD_SIZE;
     for (const lx of [2, 6]) {
       const rStop = cellWorldRect(cx, cz, lx, 3);
       props.push({ kind: "WHEEL_STOP", x: rStop.centerX, z: rStop.centerZ, rotY: 0 });
       const rArr = cellWorldRect(cx, cz, lx, 2);
       props.push({ kind: "FLOOR_ARROW", x: rArr.centerX, z: rArr.centerZ, rotY: 0 });
+      if (!SOLID_CELL_TYPES.has(grid[3][lx])) {
+        for (const sxLine of [rStop.minX + 0.08, rStop.maxX - 0.08]) {
+          props.push({ kind: "PARKING_LINE", x: sxLine, z: rStop.centerZ + 0.15, w: 0.11, d: 3.1 });
+        }
+      }
+    }
+    for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
+      if (!SOLID_CELL_TYPES.has(grid[2][lx])) {
+        const laneX = baseChunkX + (lx + 0.5) * CELL_SIZE;
+        props.push({ kind: "PARKING_LINE", x: laneX, z: baseChunkZ + 6.08, w: CELL_SIZE - 0.12, d: 0.10 });
+        props.push({ kind: "PARKING_LINE", x: laneX, z: baseChunkZ + 8.92, w: CELL_SIZE - 0.12, d: 0.10 });
+      }
     }
     if ((cx + cz) % 2 === 0) {
       const b = cellWorldRect(cx, cz, 4, 1);
@@ -1228,8 +1234,6 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
         height: 0.84,
       });
     }
-    const baseChunkX = cx * CHUNK_WORLD_SIZE;
-    const baseChunkZ = cz * CHUNK_WORLD_SIZE;
     props.push({ kind: "OVERHEAD_BEAM", x: baseChunkX + 12.0, z: baseChunkZ + 4.5 });
     props.push({ kind: "OVERHEAD_BEAM", x: baseChunkX + 12.0, z: baseChunkZ + 16.5 });
     props.push({ kind: "CEILING_PIPE", x: baseChunkX + 12.0, z: baseChunkZ + 7.5, color: 0xb84a27 });
