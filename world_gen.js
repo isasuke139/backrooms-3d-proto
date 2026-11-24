@@ -1,6 +1,7 @@
 /**
- * Seed-deterministic infinite chunk maze generator, cross-chunk seam solver,
- * AABB circle collision resolver, and Canvas 2D procedural texture fallback.
+ * Seed-deterministic infinite chunk maze generator, Wiki-faithful per-level
+ * architecture/props, cross-chunk seam solver, AABB circle collision resolver,
+ * and Canvas 2D procedural texture fallback.
  *
  * Pure ES module (safe to import directly in Node.js without DOM or Three.js).
  * Mirrors a future Godot 4.3 ChunkGenerator for zero-bandwidth terrain sync.
@@ -93,7 +94,6 @@ export function chunkKey(levelId, cx, cz) {
  * border slots, preventing sealed walls across chunk seams.
  */
 export function isBorderOpening(worldSeed, levelId, ax, az, bx, bz, slot = 0) {
-  // Always keep origin spawn neighborhood open across (-1,0)/(0,-1)/(0,0) seams
   if (
     ((ax === 0 && az === 0) || (bx === 0 && bz === 0)) &&
     slot >= 0 &&
@@ -101,14 +101,12 @@ export function isBorderOpening(worldSeed, levelId, ax, az, bx, bz, slot = 0) {
   ) {
     return true;
   }
-  // Canonical ordering so (A, B) === (B, A)
   const swap = ax > bx || (ax === bx && az > bz);
   const c1x = swap ? bx : ax;
   const c1z = swap ? bz : az;
   const c2x = swap ? ax : bx;
   const c2z = swap ? az : bz;
 
-  // Deterministic guaranteed slots plus hashed openings
   if (slot === 2 || slot === 5) {
     return true;
   }
@@ -119,6 +117,12 @@ export function isBorderOpening(worldSeed, levelId, ax, az, bx, bz, slot = 0) {
 function makeEmptyGrid() {
   return Array.from({ length: CHUNK_CELLS }, () =>
     Array.from({ length: CHUNK_CELLS }, () => CELL_TYPES.EMPTY)
+  );
+}
+
+function makeWallStyleGrid() {
+  return Array.from({ length: CHUNK_CELLS }, () =>
+    Array.from({ length: CHUNK_CELLS }, () => "solid")
   );
 }
 
@@ -137,57 +141,33 @@ function carveCorridor(grid, x0, z0, x1, z1) {
 }
 
 function applyCrossChunkSeams(grid, worldSeed, levelId, cx, cz) {
-  // North edge (lz = 0) shared with (cx, cz - 1)
   for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
     if (isBorderOpening(worldSeed, levelId, cx, cz, cx, cz - 1, lx)) {
-      if (SOLID_CELL_TYPES.has(grid[0][lx])) {
-        grid[0][lx] = CELL_TYPES.EMPTY;
-      }
-      if (SOLID_CELL_TYPES.has(grid[1][lx])) {
-        grid[1][lx] = CELL_TYPES.EMPTY;
-      }
+      if (SOLID_CELL_TYPES.has(grid[0][lx])) grid[0][lx] = CELL_TYPES.EMPTY;
+      if (SOLID_CELL_TYPES.has(grid[1][lx])) grid[1][lx] = CELL_TYPES.EMPTY;
     }
-  }
-  // South edge (lz = 7) shared with (cx, cz + 1)
-  for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
     if (isBorderOpening(worldSeed, levelId, cx, cz, cx, cz + 1, lx)) {
-      if (SOLID_CELL_TYPES.has(grid[CHUNK_CELLS - 1][lx])) {
-        grid[CHUNK_CELLS - 1][lx] = CELL_TYPES.EMPTY;
-      }
-      if (SOLID_CELL_TYPES.has(grid[CHUNK_CELLS - 2][lx])) {
-        grid[CHUNK_CELLS - 2][lx] = CELL_TYPES.EMPTY;
-      }
+      if (SOLID_CELL_TYPES.has(grid[CHUNK_CELLS - 1][lx])) grid[CHUNK_CELLS - 1][lx] = CELL_TYPES.EMPTY;
+      if (SOLID_CELL_TYPES.has(grid[CHUNK_CELLS - 2][lx])) grid[CHUNK_CELLS - 2][lx] = CELL_TYPES.EMPTY;
     }
   }
-  // West edge (lx = 0) shared with (cx - 1, cz)
   for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
     if (isBorderOpening(worldSeed, levelId, cx, cz, cx - 1, cz, lz)) {
-      if (SOLID_CELL_TYPES.has(grid[lz][0])) {
-        grid[lz][0] = CELL_TYPES.EMPTY;
-      }
-      if (SOLID_CELL_TYPES.has(grid[lz][1])) {
-        grid[lz][1] = CELL_TYPES.EMPTY;
-      }
+      if (SOLID_CELL_TYPES.has(grid[lz][0])) grid[lz][0] = CELL_TYPES.EMPTY;
+      if (SOLID_CELL_TYPES.has(grid[lz][1])) grid[lz][1] = CELL_TYPES.EMPTY;
     }
-  }
-  // East edge (lx = 7) shared with (cx + 1, cz)
-  for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
     if (isBorderOpening(worldSeed, levelId, cx, cz, cx + 1, cz, lz)) {
-      if (SOLID_CELL_TYPES.has(grid[lz][CHUNK_CELLS - 1])) {
-        grid[lz][CHUNK_CELLS - 1] = CELL_TYPES.EMPTY;
-      }
-      if (SOLID_CELL_TYPES.has(grid[lz][CHUNK_CELLS - 2])) {
-        grid[lz][CHUNK_CELLS - 2] = CELL_TYPES.EMPTY;
-      }
+      if (SOLID_CELL_TYPES.has(grid[lz][CHUNK_CELLS - 1])) grid[lz][CHUNK_CELLS - 1] = CELL_TYPES.EMPTY;
+      if (SOLID_CELL_TYPES.has(grid[lz][CHUNK_CELLS - 2])) grid[lz][CHUNK_CELLS - 2] = CELL_TYPES.EMPTY;
     }
   }
 }
 
-function cellWorldRect(cx, cz, lx, lz, inset = 0) {
-  const minX = (cx * CHUNK_CELLS + lx) * CELL_SIZE + inset;
-  const maxX = (cx * CHUNK_CELLS + lx + 1) * CELL_SIZE - inset;
-  const minZ = (cz * CHUNK_CELLS + lz) * CELL_SIZE + inset;
-  const maxZ = (cz * CHUNK_CELLS + lz + 1) * CELL_SIZE - inset;
+function cellWorldRect(cx, cz, lx, lz, insetX = 0, insetZ = insetX) {
+  const minX = (cx * CHUNK_CELLS + lx) * CELL_SIZE + insetX;
+  const maxX = (cx * CHUNK_CELLS + lx + 1) * CELL_SIZE - insetX;
+  const minZ = (cz * CHUNK_CELLS + lz) * CELL_SIZE + insetZ;
+  const maxZ = (cz * CHUNK_CELLS + lz + 1) * CELL_SIZE - insetZ;
   return {
     minX,
     maxX,
@@ -208,41 +188,62 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
   const chunkHash = hashCoords(seedNum, levelId, cx, cz, 0);
   const rng = createMulberry32(chunkHash);
   const grid = makeEmptyGrid();
+  const wallStyles = makeWallStyleGrid();
   const lights = [];
   const interactables = [];
   const props = [];
+  const zoneTag = `${String.fromCharCode(65 + Math.abs(cx * 3 + cz) % 6)}${Math.abs(cx + cz * 2) % 9 + 1}`;
 
   if (levelId === "level_0") {
-    // Non-Euclidean office partitions & irregular yellow rooms
+    // Open retail hall layout with slim drywall partitions & arched colonnade dividers
     for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
       for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
         const r = rng();
-        if (r < 0.27) {
+        if (r < 0.14) {
           grid[lz][lx] = CELL_TYPES.WALL;
-        } else if (r < 0.31) {
+          wallStyles[lz][lx] = r < 0.065 ? "thin_x" : r < 0.12 ? "thin_z" : "solid";
+        } else if (r < 0.175) {
           grid[lz][lx] = CELL_TYPES.PILLAR;
+          wallStyles[lz][lx] = "l0_pillar";
         }
       }
     }
-    // Carve cross-corridors so rooms remain interconnected
-    carveCorridor(grid, 2, 0, 2, 7);
-    carveCorridor(grid, 5, 0, 5, 7);
-    carveCorridor(grid, 0, 2, 7, 2);
-    carveCorridor(grid, 0, 5, 7, 5);
+
+    // Arched colonnade divider strip matching File:Level 0 alt.png
+    if ((cx + cz) % 2 === 0) {
+      const archX = 4;
+      for (let lz = 2; lz <= 4; lz += 1) {
+        grid[lz][archX] = CELL_TYPES.WALL;
+        wallStyles[lz][archX] = "arched_divider";
+      }
+    }
+
+    carveCorridor(grid, 1, 0, 1, 7);
+    carveCorridor(grid, 6, 0, 6, 7);
+    carveCorridor(grid, 0, 1, 7, 1);
+    carveCorridor(grid, 0, 6, 7, 6);
     applyCrossChunkSeams(grid, seedNum, levelId, cx, cz);
 
     if (cx === 0 && cz === 0) {
-      // Clear 3x3 spawn area around (1.5, 1.5)
       for (let lz = 0; lz <= 2; lz += 1) {
         for (let lx = 0; lx <= 2; lx += 1) {
           grid[lz][lx] = CELL_TYPES.EMPTY;
         }
       }
-      // Guarantee solid wall in chunk (0,0) for gameplay & collision testing
+      // Guarantee full solid wall at (3,3) for collision test & framing divider walls
       grid[3][3] = CELL_TYPES.WALL;
+      wallStyles[3][3] = "solid";
+      grid[2][4] = CELL_TYPES.WALL;
+      wallStyles[2][4] = "arched_divider";
+      grid[3][4] = CELL_TYPES.WALL;
+      wallStyles[3][4] = "arched_divider";
+      grid[4][1] = CELL_TYPES.WALL;
+      wallStyles[4][1] = "thin_z";
       grid[1][5] = CELL_TYPES.GLITCH_WALL;
+      wallStyles[1][5] = "solid";
       grid[5][2] = CELL_TYPES.STAIRS;
       grid[6][6] = CELL_TYPES.OUTLET_WALL;
+      wallStyles[6][6] = "solid";
 
       const glitchRect = cellWorldRect(cx, cz, 5, 1);
       interactables.push({
@@ -270,22 +271,22 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         context: { targetLevelId: "level_1" },
       });
 
-      const plaqueRect = cellWorldRect(cx, cz, 2, 0);
+      const plaqueRect = cellWorldRect(cx, cz, 3, 2);
       props.push({
         kind: "PHOTO_PLAQUE",
         x: plaqueRect.centerX,
         z: plaqueRect.centerZ,
         label: "M.E.G. 記録写真: Level 0",
       });
-    } else if (cx === 1 && cz === 0 || (chunkHash % 13 === 0 && !(cx === 0 && cz === 0))) {
-      // Manila Room spatial anomaly pocket
+    } else if ((cx === 1 && cz === 0) || (chunkHash % 13 === 0 && !(cx === 0 && cz === 0))) {
       for (let lz = 3; lz <= 5; lz += 1) {
         for (let lx = 3; lx <= 5; lx += 1) {
           grid[lz][lx] = CELL_TYPES.MANILA_WALL;
+          wallStyles[lz][lx] = "manila_wall";
         }
       }
       grid[4][4] = CELL_TYPES.EMPTY;
-      grid[4][3] = CELL_TYPES.DOOR; // open doorway into pocket
+      grid[4][3] = CELL_TYPES.DOOR;
       carveCorridor(grid, 0, 4, 3, 4);
       const mr = cellWorldRect(cx, cz, 4, 4);
       interactables.push({
@@ -301,6 +302,7 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
       });
     } else if (chunkHash % 5 === 0) {
       grid[3][4] = CELL_TYPES.GLITCH_WALL;
+      wallStyles[3][4] = "solid";
       const gRect = cellWorldRect(cx, cz, 4, 3);
       interactables.push({
         id: `l0_glitch_${cx}_${cz}`,
@@ -314,19 +316,53 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         context: {},
       });
     }
-  } else if (levelId === "manila_room") {
-    for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
-      for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
-        if ((lx === 0 || lz === 0 || lx === 7 || lz === 7) && rng() < 0.45) {
-          grid[lz][lx] = CELL_TYPES.MANILA_WALL;
-        } else if (rng() < 0.16) {
-          grid[lz][lx] = CELL_TYPES.MANILA_WALL;
+
+    // Scattered electrical outlets at knee height on walls (File:Thebackrooms.jpg)
+    for (let lz = 1; lz < CHUNK_CELLS - 1; lz += 1) {
+      for (let lx = 1; lx < CHUNK_CELLS - 1; lx += 1) {
+        if (grid[lz][lx] === CELL_TYPES.WALL && wallStyles[lz][lx] === "solid" && (lx + lz) % 3 === 0) {
+          const r = cellWorldRect(cx, cz, lx, lz);
+          props.push({ kind: "WALL_OUTLET", x: r.centerX, z: r.minZ - 0.03, rotY: 0 });
         }
       }
     }
-    carveCorridor(grid, 2, 0, 2, 7);
-    carveCorridor(grid, 0, 2, 7, 2);
-    carveCorridor(grid, 5, 0, 5, 7);
+
+    // Straight office rows of fluorescent light panels
+    for (const lx of [1, 4, 6]) {
+      for (const lz of [1, 4]) {
+        if (!SOLID_CELL_TYPES.has(grid[lz][lx])) {
+          const r = cellWorldRect(cx, cz, lx, lz);
+          lights.push({
+            x: r.centerX,
+            y: levelData.environment.ceilingHeight - 0.06,
+            z: r.centerZ,
+            flickerPhase: ((lx * 7 + lz * 13 + Math.abs(cx + cz)) % 17) * 0.37,
+          });
+        }
+      }
+    }
+  } else if (levelId === "manila_room") {
+    // Cozy, intimate enclosed anomaly chamber with singular warm light
+    for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
+      for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
+        if (lx === 5 || lz === 5) {
+          grid[lz][lx] = CELL_TYPES.MANILA_WALL;
+          wallStyles[lz][lx] = "manila_wall";
+        }
+      }
+    }
+    if (cx === -1 && cz === 0) {
+      for (let lz = 0; lz <= 4; lz += 1) {
+        grid[lz][6] = CELL_TYPES.MANILA_WALL;
+        wallStyles[lz][6] = "manila_wall";
+      }
+    }
+    if (cx === 0 && cz === -1) {
+      for (let lx = 0; lx <= 4; lx += 1) {
+        grid[6][lx] = CELL_TYPES.MANILA_WALL;
+        wallStyles[6][lx] = "manila_wall";
+      }
+    }
     applyCrossChunkSeams(grid, seedNum, levelId, cx, cz);
 
     if (cx === 0 && cz === 0) {
@@ -336,8 +372,10 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         }
       }
       grid[5][5] = CELL_TYPES.MANILA_WALL;
+      wallStyles[5][5] = "manila_wall";
       grid[3][4] = CELL_TYPES.DOOR;
       grid[4][1] = CELL_TYPES.DOOR;
+
       const restRect = cellWorldRect(cx, cz, 4, 3);
       interactables.push({
         id: "manila_rest_anchor",
@@ -362,25 +400,47 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         lz: 4,
         context: { targetLevelId: "level_0" },
       });
+
+      const tbl = cellWorldRect(cx, cz, 3, 2);
+      props.push({ kind: "REST_TABLE", x: tbl.centerX, z: tbl.centerZ });
+      const outlet = cellWorldRect(cx, cz, 4, 1);
+      props.push({ kind: "WALL_OUTLET", x: outlet.maxX + 2.97, z: outlet.centerZ, rotY: Math.PI / 2 });
+
+      // Strictly ONE singular dull orange overhead fixture inside the Manila Room
+      lights.push({
+        x: 4.5,
+        y: levelData.environment.ceilingHeight - 0.1,
+        z: 4.5,
+        flickerPhase: 0.42,
+      });
+    } else {
+      const r = cellWorldRect(cx, cz, 3, 3);
+      lights.push({
+        x: r.centerX,
+        y: levelData.environment.ceilingHeight - 0.1,
+        z: r.centerZ,
+        flickerPhase: 0.9,
+      });
     }
   } else if (levelId === "level_1") {
-    // Open concrete parking lot bays with grid pillars, cars, and puddles
+    // Wide concrete parking deck with structural pillars, curbs, arrows, ramps & puddles
     for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
       for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
-        if (lx % 3 === 1 && lz % 3 === 1) {
+        if ((lx === 1 || lx === 5) && (lz === 1 || lz === 5)) {
           grid[lz][lx] = CELL_TYPES.PILLAR;
-        } else if (rng() < 0.08) {
+          wallStyles[lz][lx] = "parking_pillar";
+        } else if (Math.abs(cx * 3 + cz) % 4 === 2 && lz === 4 && lx >= 2 && lx <= 5) {
           grid[lz][lx] = CELL_TYPES.WALL;
-        } else if (rng() < 0.06) {
+          wallStyles[lz][lx] = "solid";
+        } else if (rng() < 0.045) {
           grid[lz][lx] = CELL_TYPES.CAR;
-        } else if (rng() < 0.14) {
+        } else if (rng() < 0.13) {
           grid[lz][lx] = CELL_TYPES.PUDDLE;
         }
       }
     }
     carveCorridor(grid, 2, 0, 2, 7);
     carveCorridor(grid, 0, 2, 7, 2);
-    carveCorridor(grid, 5, 0, 5, 7);
     applyCrossChunkSeams(grid, seedNum, levelId, cx, cz);
 
     if (cx === 0 && cz === 0) {
@@ -389,12 +449,16 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
           grid[lz][lx] = CELL_TYPES.EMPTY;
         }
       }
+      grid[5][5] = CELL_TYPES.PILLAR;
+      wallStyles[5][5] = "parking_pillar";
       grid[1][3] = CELL_TYPES.CAR;
       grid[5][2] = CELL_TYPES.STAIRS;
       grid[2][5] = CELL_TYPES.STAIRS;
       grid[4][4] = CELL_TYPES.KEY_PEDESTAL;
       grid[4][6] = CELL_TYPES.OUTLET_WALL;
+      wallStyles[4][6] = "solid";
       grid[3][3] = CELL_TYPES.PUDDLE;
+      grid[2][3] = CELL_TYPES.PUDDLE;
 
       const s0 = cellWorldRect(cx, cz, 2, 5);
       interactables.push({
@@ -447,8 +511,11 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         lz: 4,
         context: {},
       });
+
+      // Fake Exit sign above blank wall & sloped parking ramp (File:Level 1.jpg & lore)
+      props.push({ kind: "FAKE_EXIT_SIGN", x: outRect.centerX, z: outRect.minZ - 0.04 });
+      props.push({ kind: "PARKING_RAMP", x: 4.5, z: 21.0 });
     } else if (cx === 1 && cz === 0) {
-      // Canonical Hub Sequence Alcove: Door B -> Door A
       for (let lz = 2; lz <= 4; lz += 1) {
         for (let lx = 1; lx <= 6; lx += 1) {
           grid[lz][lx] = CELL_TYPES.EMPTY;
@@ -495,39 +562,131 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         context: {},
       });
     }
+
+    // Parking bay yellow wheel stops, floor directional arrows, orange barriers, ceiling beams & pipes
+    for (const lx of [2, 6]) {
+      const rStop = cellWorldRect(cx, cz, lx, 3);
+      props.push({ kind: "WHEEL_STOP", x: rStop.centerX, z: rStop.centerZ, rotY: 0 });
+      const rArr = cellWorldRect(cx, cz, lx, 2);
+      props.push({ kind: "FLOOR_ARROW", x: rArr.centerX, z: rArr.centerZ, rotY: 0 });
+    }
+    if ((cx + cz) % 2 === 0) {
+      const b = cellWorldRect(cx, cz, 4, 1);
+      props.push({ kind: "TRAFFIC_BARRIER", x: b.centerX, z: b.centerZ, rotY: 0 });
+    }
+    const baseChunkX = cx * CHUNK_WORLD_SIZE;
+    const baseChunkZ = cz * CHUNK_WORLD_SIZE;
+    props.push({ kind: "OVERHEAD_BEAM", x: baseChunkX + 12.0, z: baseChunkZ + 4.5 });
+    props.push({ kind: "OVERHEAD_BEAM", x: baseChunkX + 12.0, z: baseChunkZ + 16.5 });
+    props.push({ kind: "CEILING_PIPE", x: baseChunkX + 12.0, z: baseChunkZ + 7.5, color: 0xb84a27 });
+    props.push({ kind: "CEILING_PIPE", x: baseChunkX + 12.0, z: baseChunkZ + 13.5, color: 0x9aa2ab });
+
+    for (const [lx, lz] of [[2, 2], [6, 2], [2, 6], [6, 6]]) {
+      if (!SOLID_CELL_TYPES.has(grid[lz][lx])) {
+        const r = cellWorldRect(cx, cz, lx, lz);
+        lights.push({
+          x: r.centerX,
+          y: levelData.environment.ceilingHeight - 0.14,
+          z: r.centerZ,
+          flickerPhase: ((lx * 5 + lz * 11) % 13) * 0.4,
+        });
+      }
+    }
   } else if (levelId === "the_hub") {
-    // Subterranean asphalt tunnel nexus with side walkways & level doors
+    // Subterranean semi-circular arched concrete highway tunnel nexus (Tunnel.webp & Now THIS is the hub.png)
+    const isMainEWTunnel = cz % 2 === 0;
+    const isCrossNSTunnel = cx % 2 === 0;
+
     for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
       for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
-        if (lz === 0 || lz === 7) {
+        const inEW = isMainEWTunnel && lz <= 3;
+        const inNS = isCrossNSTunnel && lx >= 2 && lx <= 5;
+        if (!inEW && !inNS) {
           grid[lz][lx] = CELL_TYPES.WALL;
-        } else if (lz === 1 || lz === 6) {
-          grid[lz][lx] = rng() < 0.25 ? CELL_TYPES.PILLAR : CELL_TYPES.EMPTY;
+          wallStyles[lz][lx] = "hub_concrete";
         }
       }
     }
-    // Cross intersection tunnels on even chunks
-    if ((cx + cz) % 2 === 0) {
+
+    if (isMainEWTunnel) {
+      carveCorridor(grid, 0, 1, 7, 1);
+      carveCorridor(grid, 0, 2, 7, 2);
+    }
+    if (isCrossNSTunnel) {
       carveCorridor(grid, 3, 0, 3, 7);
       carveCorridor(grid, 4, 0, 4, 7);
     }
-    carveCorridor(grid, 0, 3, 7, 3);
-    carveCorridor(grid, 0, 4, 7, 4);
     applyCrossChunkSeams(grid, seedNum, levelId, cx, cz);
 
+    const chunkOriginX = cx * CHUNK_WORLD_SIZE;
+    const chunkOriginZ = cz * CHUNK_WORLD_SIZE;
+
+    if (isMainEWTunnel) {
+      props.push({
+        kind: "TUNNEL_ARCH",
+        centerX: chunkOriginX + 12.0,
+        centerZ: chunkOriginZ + 6.0,
+        length: CHUNK_WORLD_SIZE,
+        radius: 6.2,
+        axis: "x",
+      });
+      props.push({
+        kind: "HIGHWAY_ROAD",
+        centerX: chunkOriginX + 12.0,
+        centerZ: chunkOriginZ + 6.0,
+        length: CHUNK_WORLD_SIZE,
+        width: 7.4,
+        axis: "x",
+      });
+      props.push({ kind: "SIDEWALK_CURB", x: chunkOriginX + 12.0, z: chunkOriginZ + 1.15, length: CHUNK_WORLD_SIZE, width: 2.3, axis: "x" });
+      props.push({ kind: "SIDEWALK_CURB", x: chunkOriginX + 12.0, z: chunkOriginZ + 10.85, length: CHUNK_WORLD_SIZE, width: 2.3, axis: "x" });
+      props.push({ kind: "TRAFFIC_GANTRY", x: chunkOriginX + 12.0, z: chunkOriginZ + 6.0, axis: "x" });
+      props.push({ kind: "VENT_FAN", x: chunkOriginX + 18.0, z: chunkOriginZ + 4.7, y: 5.2, axis: "x" });
+      props.push({ kind: "VENT_FAN", x: chunkOriginX + 18.0, z: chunkOriginZ + 7.3, y: 5.2, axis: "x" });
+      props.push({ kind: "BLUE_TUNNEL_SIGN", x: chunkOriginX + 9.0, z: chunkOriginZ + 0.35, axis: "x" });
+
+      // Twin orange-yellow overhead arch lighting rows
+      for (const lx of [1, 4, 6]) {
+        const px = chunkOriginX + (lx + 0.5) * CELL_SIZE;
+        lights.push({ x: px, y: 5.4, z: chunkOriginZ + 4.1, flickerPhase: lx * 0.3 });
+        lights.push({ x: px, y: 5.4, z: chunkOriginZ + 7.9, flickerPhase: lx * 0.5 });
+      }
+    } else if (isCrossNSTunnel) {
+      props.push({
+        kind: "TUNNEL_ARCH",
+        centerX: chunkOriginX + 12.0,
+        centerZ: chunkOriginZ + 12.0,
+        length: CHUNK_WORLD_SIZE,
+        radius: 6.2,
+        axis: "z",
+      });
+      props.push({
+        kind: "HIGHWAY_ROAD",
+        centerX: chunkOriginX + 12.0,
+        centerZ: chunkOriginZ + 12.0,
+        length: CHUNK_WORLD_SIZE,
+        width: 7.4,
+        axis: "z",
+      });
+      props.push({ kind: "TRAFFIC_GANTRY", x: chunkOriginX + 12.0, z: chunkOriginZ + 12.0, axis: "z" });
+      lights.push({ x: chunkOriginX + 10.1, y: 5.4, z: chunkOriginZ + 12.0, flickerPhase: 0.4 });
+      lights.push({ x: chunkOriginX + 13.9, y: 5.4, z: chunkOriginZ + 12.0, flickerPhase: 0.7 });
+    } else {
+      lights.push({ x: chunkOriginX + 12.0, y: 5.0, z: chunkOriginZ + 12.0, flickerPhase: 0.2 });
+    }
+
     if (cx === 0 && cz === 0) {
-      for (let lz = 0; lz <= 2; lz += 1) {
+      for (let lz = 0; lz <= 3; lz += 1) {
         for (let lx = 0; lx <= 2; lx += 1) {
           grid[lz][lx] = CELL_TYPES.EMPTY;
         }
       }
-      grid[0][0] = CELL_TYPES.EMPTY;
-      grid[2][2] = CELL_TYPES.KEY_PEDESTAL;
-      grid[1][5] = CELL_TYPES.DOOR;
-      grid[5][6] = CELL_TYPES.DOOR;
-      grid[6][3] = CELL_TYPES.DOOR;
+      grid[0][2] = CELL_TYPES.KEY_PEDESTAL;
+      grid[0][5] = CELL_TYPES.DOOR;
+      grid[3][6] = CELL_TYPES.DOOR;
+      grid[3][3] = CELL_TYPES.DOOR;
 
-      const kRect = cellWorldRect(cx, cz, 2, 2);
+      const kRect = cellWorldRect(cx, cz, 2, 0);
       interactables.push({
         id: "hub_key_pedestal",
         type: "KEY_PICKUP",
@@ -536,46 +695,46 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         x: kRect.centerX,
         z: kRect.centerZ,
         lx: 2,
-        lz: 2,
+        lz: 0,
         context: {},
       });
 
-      const d0 = cellWorldRect(cx, cz, 5, 1);
+      const d0 = cellWorldRect(cx, cz, 5, 0);
       interactables.push({
         id: "hub_door_level_0",
         type: "HUB_LEVEL_DOOR",
         triggerType: "HUB_DOOR",
         label: "金属扉 [Level 0: 黄色紋章] (Level Key必要 - Eキー)",
         x: d0.centerX,
-        z: d0.centerZ,
+        z: d0.minZ + 0.55,
         lx: 5,
-        lz: 1,
+        lz: 0,
         context: { targetLevelId: "level_0", doorTint: 0xe6c85c },
       });
 
-      const d1 = cellWorldRect(cx, cz, 6, 5);
+      const d1 = cellWorldRect(cx, cz, 6, 3);
       interactables.push({
         id: "hub_door_level_1",
         type: "HUB_LEVEL_DOOR",
         triggerType: "HUB_DOOR",
         label: "金属扉 [Level 1: 灰色コンクリート] (Level Key必要 - Eキー)",
         x: d1.centerX,
-        z: d1.centerZ,
+        z: d1.maxZ - 0.55,
         lx: 6,
-        lz: 5,
+        lz: 3,
         context: { targetLevelId: "level_1", doorTint: 0x8d959e },
       });
 
-      const d2 = cellWorldRect(cx, cz, 3, 6);
+      const d2 = cellWorldRect(cx, cz, 3, 3);
       interactables.push({
         id: "hub_door_level_2",
         type: "HUB_LEVEL_DOOR",
         triggerType: "HUB_DOOR",
         label: "金属扉 [Level 2: 錆配管紋章] (Level Key必要 - Eキー)",
         x: d2.centerX,
-        z: d2.centerZ,
+        z: d2.maxZ - 0.55,
         lx: 3,
-        lz: 6,
+        lz: 3,
         context: { targetLevelId: "level_2", doorTint: 0xb86434 },
       });
     } else if (cx === 0 && cz === 1) {
@@ -594,11 +753,12 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
       });
     }
   } else if (levelId === "level_2") {
-    // Tight industrial maintenance tunnels lined with rusting pipes
+    // Claustrophobic low-ceiling industrial maintenance shafts choked with side pipes & concrete ribs
     for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
       for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
-        if (rng() < 0.44) {
+        if (rng() < 0.54) {
           grid[lz][lx] = CELL_TYPES.WALL;
+          wallStyles[lz][lx] = "solid";
         }
       }
     }
@@ -672,70 +832,76 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999) {
         context: {},
       });
     }
+
+    // Add chamfered concrete shaft ribs and multi-tier side pipes along corridors
+    for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
+      for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
+        if (SOLID_CELL_TYPES.has(grid[lz][lx])) continue;
+        const r = cellWorldRect(cx, cz, lx, lz);
+        const axis = lx === 1 || lx === 5 ? "z" : "x";
+        if ((lx + lz) % 2 === 0) {
+          props.push({ kind: "CHAMFER_RIB", x: r.centerX, z: r.centerZ, axis });
+        }
+        const leftSolid = lx > 0 && SOLID_CELL_TYPES.has(grid[lz][lx - 1]);
+        const rightSolid = lx < CHUNK_CELLS - 1 && SOLID_CELL_TYPES.has(grid[lz][lx + 1]);
+        const northSolid = lz > 0 && SOLID_CELL_TYPES.has(grid[lz - 1][lx]);
+        const southSolid = lz < CHUNK_CELLS - 1 && SOLID_CELL_TYPES.has(grid[lz + 1][lx]);
+        if (leftSolid) props.push({ kind: "SIDE_PIPE_RUN", x: r.minX + 0.16, z: r.centerZ, axis: "z", hasValve: (lx + lz) % 3 === 0 });
+        if (rightSolid) props.push({ kind: "SIDE_PIPE_RUN", x: r.maxX - 0.16, z: r.centerZ, axis: "z", hasValve: false });
+        if (northSolid) props.push({ kind: "SIDE_PIPE_RUN", x: r.centerX, z: r.minZ + 0.16, axis: "x", hasValve: (lx + lz) % 4 === 0 });
+        if (southSolid) props.push({ kind: "SIDE_PIPE_RUN", x: r.centerX, z: r.maxZ - 0.16, axis: "x", hasValve: false });
+        if (lx === 5 && lz === 1) {
+          props.push({ kind: "STEAM_VENT", x: r.centerX, z: r.centerZ });
+        }
+      }
+    }
+
+    const dimPt = cellWorldRect(cx, cz, 1, 1);
+    lights.push({
+      x: dimPt.centerX,
+      y: levelData.environment.ceilingHeight - 0.1,
+      z: dimPt.centerZ,
+      flickerPhase: (Math.abs(cx * 3 + cz * 7) % 11) * 0.5,
+    });
   }
 
-  // Extract wall AABBs, pipe props, and deterministic ceiling light placements
+  // Extract wall AABBs (respecting thin partitions, pillars, and full solid cells)
   const walls = [];
   for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
     for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
       const cellType = grid[lz][lx];
-      if (SOLID_CELL_TYPES.has(cellType)) {
-        const inset =
-          cellType === CELL_TYPES.PILLAR
-            ? 0.72
-            : cellType === CELL_TYPES.CAR
-            ? 0.38
-            : 0;
-        const rect = cellWorldRect(cx, cz, lx, lz, inset);
-        walls.push({
-          lx,
-          lz,
-          cellType,
-          minX: rect.minX,
-          maxX: rect.maxX,
-          minZ: rect.minZ,
-          maxZ: rect.maxZ,
-          height:
-            cellType === CELL_TYPES.CAR
-              ? 1.45
-              : levelData.environment.ceilingHeight,
-        });
-      } else if (cellType === CELL_TYPES.PUDDLE) {
-        const rect = cellWorldRect(cx, cz, lx, lz, 0.2);
-        props.push({
-          kind: "PUDDLE",
-          x: rect.centerX,
-          z: rect.centerZ,
-          radius: 1.1,
-        });
-      } else if (
-        (levelId === "the_hub" || levelId === "level_2") &&
-        (lx + lz) % 3 === 0
-      ) {
-        const rect = cellWorldRect(cx, cz, lx, lz);
-        props.push({
-          kind: "OVERHEAD_PIPE",
-          x: rect.centerX,
-          z: rect.centerZ,
-          axis: lz % 2 === 0 ? "x" : "z",
-        });
+      if (!SOLID_CELL_TYPES.has(cellType)) continue;
+
+      const style = wallStyles[lz][lx] || "solid";
+      let rect;
+      if (cellType === CELL_TYPES.PILLAR || style === "parking_pillar" || style === "l0_pillar") {
+        const inset = style === "parking_pillar" ? 0.92 : 1.02;
+        rect = cellWorldRect(cx, cz, lx, lz, inset, inset);
+      } else if (cellType === CELL_TYPES.CAR) {
+        rect = cellWorldRect(cx, cz, lx, lz, 0.38, 0.38);
+      } else if (style === "thin_x" || style === "arched_divider") {
+        rect = cellWorldRect(cx, cz, lx, lz, 0, 1.31); // 0.38m thick along Z
+      } else if (style === "thin_z") {
+        rect = cellWorldRect(cx, cz, lx, lz, 1.31, 0); // 0.38m thick along X
+      } else {
+        rect = cellWorldRect(cx, cz, lx, lz, 0, 0);
       }
 
-      // Deterministic ceiling lights on sparse open cells
-      if (
-        !SOLID_CELL_TYPES.has(cellType) &&
-        ((lx === 2 && lz === 2) ||
-          (lx === 5 && lz === 5) ||
-          (lx === 2 && lz === 6 && levelId === "the_hub"))
-      ) {
-        const rect = cellWorldRect(cx, cz, lx, lz);
-        lights.push({
-          x: rect.centerX,
-          y: levelData.environment.ceilingHeight - 0.12,
-          z: rect.centerZ,
-          flickerPhase: ((lx * 7 + lz * 13 + Math.abs(cx + cz)) % 17) * 0.37,
-        });
-      }
+      walls.push({
+        lx,
+        lz,
+        cellType,
+        wallStyle: style,
+        zoneLabel: style === "parking_pillar" ? zoneTag : null,
+        minX: rect.minX,
+        maxX: rect.maxX,
+        minZ: rect.minZ,
+        maxZ: rect.maxZ,
+        height:
+          cellType === CELL_TYPES.CAR
+            ? 1.45
+            : levelData.environment.ceilingHeight,
+      });
     }
   }
 
@@ -787,7 +953,6 @@ export class ChunkManager {
     const loadedKeys = [];
     const unloadedKeys = [];
 
-    // Load chunks within Chebyshev distance <= loadRadius
     for (let dz = -this.loadRadius; dz <= this.loadRadius; dz += 1) {
       for (let dx = -this.loadRadius; dx <= this.loadRadius; dx += 1) {
         const cx = pcx + dx;
@@ -804,7 +969,6 @@ export class ChunkManager {
       }
     }
 
-    // Evict chunks strictly beyond unloadRadius
     for (const [key, chunkData] of this.chunks.entries()) {
       const dist = Math.max(
         Math.abs(chunkData.cx - pcx),
@@ -879,7 +1043,6 @@ export class ChunkManager {
             px += (dx / dist) * overlap;
             pz += (dz / dist) * overlap;
           } else {
-            // Center strictly inside AABB: push toward shallowest edge
             const dLeft = px - wall.minX;
             const dRight = wall.maxX - px;
             const dTop = pz - wall.minZ;
@@ -940,7 +1103,7 @@ export class ChunkManager {
 }
 
 /**
- * Returns candidate URLs for loading the Wiki image from either root-served or
+ * Returns candidate URLs for loading textures from either root-served or
  * src-served HTTP servers, before falling back to procedural Canvas textures.
  */
 export function resolveTextureCandidates(levelId, slot) {
@@ -975,7 +1138,6 @@ export function createProceduralTextureCanvas(
   if (style === "level0_wallpaper") {
     ctx.fillStyle = "#c9b465";
     ctx.fillRect(0, 0, width, height);
-    // Vertical stripes + subtle Backrooms arrow/chevron motif
     for (let x = 0; x < width; x += 32) {
       ctx.fillStyle = x % 64 === 0 ? "rgba(155, 134, 58, 0.35)" : "rgba(220, 200, 120, 0.22)";
       ctx.fillRect(x, 0, 14, height);
@@ -989,7 +1151,6 @@ export function createProceduralTextureCanvas(
         ctx.stroke();
       }
     }
-    // Damp water staining along baseboard
     const grad = ctx.createLinearGradient(0, height * 0.72, 0, height);
     grad.addColorStop(0, "rgba(70, 56, 24, 0)");
     grad.addColorStop(1, "rgba(65, 52, 20, 0.45)");
@@ -1036,7 +1197,6 @@ export function createProceduralTextureCanvas(
       ctx.fillStyle = rng() > 0.5 ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.09)";
       ctx.fillRect(rng() * width, rng() * height, 3, 3);
     }
-    // Cracks & floor stripe
     ctx.strokeStyle = "rgba(35,38,42,0.7)";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -1053,8 +1213,6 @@ export function createProceduralTextureCanvas(
       ctx.fillStyle = rng() > 0.5 ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.12)";
       ctx.fillRect(rng() * width, rng() * height, 2, 2);
     }
-    ctx.fillStyle = "rgba(220, 200, 120, 0.35)";
-    ctx.fillRect(width * 0.48, 0, 8, height);
   } else if (style === "hub_tunnel") {
     ctx.fillStyle = "#5c4a3d";
     ctx.fillRect(0, 0, width, height);
