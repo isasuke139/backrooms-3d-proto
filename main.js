@@ -18,8 +18,10 @@ import { LEVELS, LICENSE_INFO, getLevelData } from "./lore_data.js";
 import {
   CELL_SIZE,
   CELL_TYPES,
+  CHUNK_CELLS,
   CHUNK_WORLD_SIZE,
   ChunkManager,
+  SOLID_CELL_TYPES,
   createProceduralTextureCanvas,
   hashStringToSeed,
   resolveTextureCandidates,
@@ -565,12 +567,12 @@ class LevelMaterialCache {
     });
     const glitchMat = new THREE.MeshStandardMaterial({
       map: materials.wall.map,
-      color: 0xffe49e,
-      emissive: 0x33270e,
-      emissiveIntensity: 0.45,
+      color: 0xc2b278,
+      emissive: 0x161206,
+      emissiveIntensity: 0.16,
       transparent: true,
-      opacity: 0.88,
-      roughness: 0.5,
+      opacity: 0.94,
+      roughness: 0.72,
     });
 
     for (const item of pendingLoads) {
@@ -923,6 +925,8 @@ class LevelMaterialCache {
         rebarMat: new THREE.MeshStandardMaterial({ color: 0x5c2f1b, roughness: 0.65, metalness: 0.7 }),
         maintBlackDoorMat: new THREE.MeshStandardMaterial({ color: 0x101214, roughness: 0.38, metalness: 0.78, envMapIntensity: 0.9 }),
         warehouseWoodDoorMat: new THREE.MeshStandardMaterial({ color: 0x6b4528, roughness: 0.82, metalness: 0.04 }),
+        warehousePinkDoorMat: new THREE.MeshStandardMaterial({ color: 0xb98d96, roughness: 0.84, metalness: 0.04 }),
+        warehouseWhiteDoorMat: new THREE.MeshStandardMaterial({ color: 0xd2d4d1, roughness: 0.8, metalness: 0.04 }),
         alcoveVoidMat: new THREE.MeshStandardMaterial({ color: 0x100c08, roughness: 0.95 }),
         crawlWireMat: new THREE.MeshBasicMaterial({ color: 0x141418 }),
         crawlSparkMat: new THREE.MeshBasicMaterial({ color: 0x6ce5ff }),
@@ -962,6 +966,7 @@ class LevelMaterialCache {
           manila_room: new THREE.MeshBasicMaterial({ map: createSignTexture("TEXT", "MANILA", "#332211", "#ffc375") }),
         },
         zoneStencilMatCache: new Map(),
+        fakeExitSignMatCache: new Map(),
         greenExitMat: new THREE.MeshBasicMaterial({ color: 0x22d665 }),
         fanBodyMat: new THREE.MeshStandardMaterial({ color: 0x32363d, roughness: 0.4, metalness: 0.8 }),
         valveRedMat: new THREE.MeshStandardMaterial({ color: 0xb82924, roughness: 0.42, metalness: 0.4 }),
@@ -1344,6 +1349,19 @@ function getZoneStencilMat(shared, zoneLabel) {
   return shared.zoneStencilMatCache.get(key);
 }
 
+function getFakeExitSignMat(shared, signLang = "EXIT") {
+  const key = signLang || "EXIT";
+  if (!shared.fakeExitSignMatCache.has(key)) {
+    shared.fakeExitSignMatCache.set(
+      key,
+      new THREE.MeshBasicMaterial({
+        map: createSignTexture("TEXT", key, "#0d381e", "#52ff91"),
+      })
+    );
+  }
+  return shared.fakeExitSignMatCache.get(key);
+}
+
 function buildChunkGroup(chunkData) {
   const levelData = getLevelData(chunkData.levelId);
   const mats = materialCache.getMaterials(chunkData.levelId);
@@ -1389,6 +1407,15 @@ function buildChunkGroup(chunkData) {
       const bodyMat = s.carColors[(w.lx + w.lz) % s.carColors.length];
       const carGroup = new THREE.Group();
       carGroup.position.set(cx, 0, cz);
+      const gridRows = chunkData.grid;
+      const adjWall =
+        (w.lx > 0 && SOLID_CELL_TYPES.has(gridRows[w.lz]?.[w.lx - 1])) ||
+        (w.lx < CHUNK_CELLS - 1 && SOLID_CELL_TYPES.has(gridRows[w.lz]?.[w.lx + 1])) ||
+        (w.lz > 0 && SOLID_CELL_TYPES.has(gridRows[w.lz - 1]?.[w.lx])) ||
+        (w.lz < CHUNK_CELLS - 1 && SOLID_CELL_TYPES.has(gridRows[w.lz + 1]?.[w.lx]));
+      carGroup.rotation.y = adjWall
+        ? (((w.lx + w.lz) % 2 === 0 ? 1 : -1) * 0.26)
+        : ((w.lx + w.lz) % 2 === 0 ? 0 : Math.PI);
 
       const carBody = new THREE.Mesh(createSedanBodyGeometry(width * 0.96, depth * 0.72), bodyMat);
       carBody.castShadow = true;
@@ -1453,29 +1480,66 @@ function buildChunkGroup(chunkData) {
       continue;
     }
 
-    if (w.wallStyle === "parking_pillar") {
-      const col = new THREE.Mesh(createWorldScaledBoxGeometry(width, w.height, depth, 3.0), mats.wall);
-      col.position.set(cx, w.height * 0.5, cz);
-      col.castShadow = true;
-      col.receiveShadow = true;
-      group.add(col);
+    if (w.wallStyle === "parking_pillar" || w.wallStyle === "parking_pillar_round") {
+      if (w.wallStyle === "parking_pillar_round") {
+        const rad = Math.min(width, depth) * 0.5;
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, w.height, 18), mats.wall);
+        col.position.set(cx, w.height * 0.5, cz);
+        col.castShadow = true;
+        col.receiveShadow = true;
+        group.add(col);
 
-      // Two-tier beveled drop-capital slab
-      const capLower = new THREE.Mesh(createWorldScaledBoxGeometry(width + 0.6, 0.18, depth + 0.6, 3.0), mats.ceiling);
-      capLower.position.set(cx, w.height - 0.34, cz);
-      group.add(capLower);
+        const capLower = new THREE.Mesh(
+          new THREE.CylinderGeometry(rad + 0.3, rad + 0.3, 0.18, 18),
+          mats.ceiling
+        );
+        capLower.position.set(cx, w.height - 0.34, cz);
+        group.add(capLower);
 
-      const capUpper = new THREE.Mesh(createWorldScaledBoxGeometry(width + 1.05, 0.2, depth + 1.05, 3.0), mats.ceiling);
-      capUpper.position.set(cx, w.height - 0.14, cz);
-      group.add(capUpper);
+        const capUpper = new THREE.Mesh(
+          new THREE.CylinderGeometry(rad + 0.52, rad + 0.52, 0.2, 18),
+          mats.ceiling
+        );
+        capUpper.position.set(cx, w.height - 0.14, cz);
+        group.add(capUpper);
 
-      const band = new THREE.Mesh(new THREE.BoxGeometry(width + 0.03, 0.42, depth + 0.03), s.pillarBandMat);
-      band.position.set(cx, w.height - 0.72, cz);
-      group.add(band);
+        const band = new THREE.Mesh(
+          new THREE.CylinderGeometry(rad + 0.015, rad + 0.015, 0.42, 18),
+          s.pillarBandMat
+        );
+        band.position.set(cx, w.height - 0.72, cz);
+        group.add(band);
 
-      const hazard = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, 0.88, depth + 0.04), s.hazardStripeMat);
-      hazard.position.set(cx, 0.44, cz);
-      group.add(hazard);
+        const hazard = new THREE.Mesh(
+          new THREE.CylinderGeometry(rad + 0.02, rad + 0.02, 0.88, 18),
+          s.hazardStripeMat
+        );
+        hazard.position.set(cx, 0.44, cz);
+        group.add(hazard);
+      } else {
+        const col = new THREE.Mesh(createWorldScaledBoxGeometry(width, w.height, depth, 3.0), mats.wall);
+        col.position.set(cx, w.height * 0.5, cz);
+        col.castShadow = true;
+        col.receiveShadow = true;
+        group.add(col);
+
+        // Two-tier beveled drop-capital slab
+        const capLower = new THREE.Mesh(createWorldScaledBoxGeometry(width + 0.6, 0.18, depth + 0.6, 3.0), mats.ceiling);
+        capLower.position.set(cx, w.height - 0.34, cz);
+        group.add(capLower);
+
+        const capUpper = new THREE.Mesh(createWorldScaledBoxGeometry(width + 1.05, 0.2, depth + 1.05, 3.0), mats.ceiling);
+        capUpper.position.set(cx, w.height - 0.14, cz);
+        group.add(capUpper);
+
+        const band = new THREE.Mesh(new THREE.BoxGeometry(width + 0.03, 0.42, depth + 0.03), s.pillarBandMat);
+        band.position.set(cx, w.height - 0.72, cz);
+        group.add(band);
+
+        const hazard = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, 0.88, depth + 0.04), s.hazardStripeMat);
+        hazard.position.set(cx, 0.44, cz);
+        group.add(hazard);
+      }
 
       const stencil = new THREE.Mesh(
         new THREE.PlaneGeometry(0.68, 0.34),
@@ -1549,6 +1613,14 @@ function buildChunkGroup(chunkData) {
         sy: 0.13,
         sz: depth + 0.03,
       });
+      batch.add(SHARED_GEOS.box, s.baseboardMat, {
+        x: cx,
+        y: 0.44,
+        z: cz,
+        sx: width + 0.032,
+        sy: 0.045,
+        sz: depth + 0.032,
+      });
     }
 
     if (w.wallStyle === "manila_wall") {
@@ -1560,18 +1632,6 @@ function buildChunkGroup(chunkData) {
         sy: 0.15,
         sz: depth + 0.04,
       });
-    }
-
-    if (w.cellType === CELL_TYPES.GLITCH_WALL) {
-      const wireGeo = new THREE.BoxGeometry(width + 0.04, w.height + 0.04, depth + 0.04);
-      const edges = new THREE.EdgesGeometry(wireGeo);
-      wireGeo.dispose();
-      const line = new THREE.LineSegments(
-        edges,
-        new THREE.LineBasicMaterial({ color: 0xffd166 })
-      );
-      line.position.set(cx, w.height * 0.5, cz);
-      group.add(line);
     }
 
     if (w.cellType === CELL_TYPES.OUTLET_WALL) {
@@ -1649,7 +1709,14 @@ function buildChunkGroup(chunkData) {
       dGrp.rotation.y = prop.rotY || 0;
       const frame = new THREE.Mesh(getSharedBoxGeo(1.38, 2.34, 0.09, 3.0), s.gantryMat);
       frame.position.set(0, 1.17, 0);
-      const leafMat = prop.kind === "MAINT_DOOR" ? s.maintBlackDoorMat : s.warehouseWoodDoorMat;
+      const leafMat =
+        prop.kind === "MAINT_DOOR"
+          ? s.maintBlackDoorMat
+          : prop.doorVariant === "pink"
+            ? s.warehousePinkDoorMat
+            : prop.doorVariant === "white"
+              ? s.warehouseWhiteDoorMat
+              : s.warehouseWoodDoorMat;
       const leaf = new THREE.Mesh(getSharedBoxGeo(1.22, 2.22, 0.06, 3.0), leafMat);
       leaf.position.set(0, 1.12, 0.02);
       const knob = new THREE.Mesh(getSharedBoxGeo(0.14, 0.04, 0.1, 1.0), s.brassMat);
@@ -1820,12 +1887,17 @@ function buildChunkGroup(chunkData) {
         rz: Math.PI / 2,
       });
     } else if (prop.kind === "FAKE_EXIT_SIGN") {
+      const signGrp = new THREE.Group();
+      signGrp.position.set(prop.x, 3.1, prop.z);
+      signGrp.rotation.y = prop.rotY !== undefined ? prop.rotY : Math.PI;
       const housing = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.44, 0.14), s.gantryMat);
-      housing.position.set(prop.x, 3.1, prop.z);
-      const face = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.34), s.exitSignMat);
-      face.position.set(prop.x, 3.1, prop.z - 0.08);
-      face.rotation.y = Math.PI;
-      group.add(housing, face);
+      const face = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.92, 0.34),
+        getFakeExitSignMat(s, prop.signLang || "EXIT")
+      );
+      face.position.set(0, 0, 0.08);
+      signGrp.add(housing, face);
+      group.add(signGrp);
     } else if (prop.kind === "TUNNEL_ARCH") {
       // 40-segment smooth concrete highway tunnel arch + curved structural ribs
       const archGeo = new THREE.CylinderGeometry(
@@ -2409,6 +2481,16 @@ function executeInteraction() {
     return;
   }
 
+  if (item.type === "OUTLET_WALL" && state.currentLevelId === "level_1") {
+    if (state.blackoutActive) {
+      addLog("[BLACKOUT] 停電中のため壁コンセントから給電できません（Nキーで壁面ノークリップのみ可能）。");
+    } else {
+      audio.playDoorTransition();
+      addLog("[OUTLET] 壁コンセントは通電中です（デバイス充電可 / Nキーで壁面ノークリップ）。");
+    }
+    return;
+  }
+
   const result = evaluateTransition({
     currentLevelId: state.currentLevelId,
     triggerType: item.triggerType,
@@ -2662,7 +2744,11 @@ function updateAtmosphere(dt, elapsedSec) {
       state.blackoutTimer = 0;
       audio.playBlackout(true);
       ui.blackoutBanner.classList.remove("hidden");
-      addLog("[BLACKOUT] 照明電源が遮断されました！懐中電灯 (F) を確保してください！");
+      addLog(
+        state.currentLevelId === "level_1"
+          ? "[BLACKOUT] 照明と壁コンセントの電源が遮断されました！Smilers に注意し懐中電灯 (F) を確保してください！"
+          : "[BLACKOUT] 照明電源が遮断されました！懐中電灯 (F) を確保してください！"
+      );
     } else if (state.blackoutActive && state.blackoutTimer >= env.blackoutDurationSec) {
       state.blackoutActive = false;
       state.blackoutTimer = 0;

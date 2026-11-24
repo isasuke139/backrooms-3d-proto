@@ -199,9 +199,10 @@ function extractChunkWalls(grid, wallStyles, cx, cz, levelData, zoneTag) {
       if (!SOLID_CELL_TYPES.has(cellType)) continue;
 
       const style = wallStyles[lz][lx] || "solid";
+      const isParkingPillar = style === "parking_pillar" || style === "parking_pillar_round";
       let rect;
-      if (cellType === CELL_TYPES.PILLAR || style === "parking_pillar" || style === "l0_pillar") {
-        const inset = style === "parking_pillar" ? 0.90 : 1.02;
+      if (cellType === CELL_TYPES.PILLAR || isParkingPillar || style === "l0_pillar") {
+        const inset = isParkingPillar ? 0.90 : 1.02;
         rect = cellWorldRect(cx, cz, lx, lz, inset, inset);
       } else if (cellType === CELL_TYPES.CAR) {
         rect = cellWorldRect(cx, cz, lx, lz, 0.38, 0.38);
@@ -218,7 +219,7 @@ function extractChunkWalls(grid, wallStyles, cx, cz, levelData, zoneTag) {
         lz,
         cellType,
         wallStyle: style,
-        zoneLabel: style === "parking_pillar" ? zoneTag : null,
+        zoneLabel: isParkingPillar ? zoneTag : null,
         minX: rect.minX,
         maxX: rect.maxX,
         minZ: rect.minZ,
@@ -567,38 +568,106 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
     openSubEdge(pick.sx, pick.sz, pick.dir);
   }
 
-  // Carve 1 small asymmetric 2x2 chamber (6m x 6m) + optional central square column
+  // Carve varied retail backroom chambers (2x3 / 3x2 w/ jutting divider wall or 2x2 w/ square pillar)
+  let chamberRect = null;
   let chamberCenter = null;
-  for (let tryIdx = 0; tryIdx < 64; tryIdx += 1) {
-    const cx0 = 1 + ((tryIdx * 3 + (chunkHash % 5)) % 5);
-    const cz0 = 1 + ((tryIdx * 5 + ((chunkHash >>> 5) % 5)) % 5);
-    const four = [
-      [cx0, cz0],
-      [cx0 + 1, cz0],
-      [cx0, cz0 + 1],
-      [cx0 + 1, cz0 + 1],
-    ];
-    if (four.some(([x, z]) => blocked[z][x])) continue;
-    const minWX = originX + cx0 * L0_SUB_SIZE;
-    const maxWX = minWX + 2 * L0_SUB_SIZE;
-    const minWZ = originZ + cz0 * L0_SUB_SIZE;
-    const maxWZ = minWZ + 2 * L0_SUB_SIZE;
-    const hitsLandmark = landmarkBoxes.some(
-      (b) => maxWX > b.minX - 0.3 && minWX < b.maxX + 0.3 && maxWZ > b.minZ - 0.3 && minWZ < b.maxZ + 0.3
-    );
-    if (hitsLandmark) continue;
 
-    openSubEdge(cx0, cz0, "E");
-    openSubEdge(cx0, cz0, "S");
-    openSubEdge(cx0 + 1, cz0, "S");
-    openSubEdge(cx0, cz0 + 1, "E");
-    chamberCenter = {
-      x: originX + (cx0 + 1) * L0_SUB_SIZE,
-      z: originZ + (cz0 + 1) * L0_SUB_SIZE,
-      sx: cx0,
-      sz: cz0,
-    };
-    break;
+  if (chunkHash % 2 === 1) {
+    const rw = (chunkHash >>> 2) % 2 === 0 ? 3 : 2;
+    const rd = rw === 3 ? 2 : 3;
+    const maxCx = N - 1 - rw;
+    const maxCz = N - 1 - rd;
+    for (let tryIdx = 0; tryIdx < 64; tryIdx += 1) {
+      const cx0 = 1 + ((tryIdx * 3 + (chunkHash % maxCx)) % maxCx);
+      const cz0 = 1 + ((tryIdx * 5 + ((chunkHash >>> 5) % maxCz)) % maxCz);
+      let anyBlocked = false;
+      for (let dz = 0; dz < rd && !anyBlocked; dz += 1) {
+        for (let dx = 0; dx < rw; dx += 1) {
+          if (blocked[cz0 + dz][cx0 + dx]) {
+            anyBlocked = true;
+            break;
+          }
+        }
+      }
+      if (anyBlocked) continue;
+      const minWX = originX + cx0 * L0_SUB_SIZE;
+      const maxWX = minWX + rw * L0_SUB_SIZE;
+      const minWZ = originZ + cz0 * L0_SUB_SIZE;
+      const maxWZ = minWZ + rd * L0_SUB_SIZE;
+      const hitsLandmark = landmarkBoxes.some(
+        (b) => maxWX > b.minX - 0.3 && minWX < b.maxX + 0.3 && maxWZ > b.minZ - 0.3 && minWZ < b.maxZ + 0.3
+      );
+      if (hitsLandmark) continue;
+
+      if (rw === 3) {
+        // 3x2 room: leave 1 offset interior drywall partition closed so it juts into the open room
+        const jutX = cx0 + ((chunkHash >>> 4) % 2 === 0 ? 0 : 2);
+        for (let dz = 0; dz < 2; dz += 1) {
+          openSubEdge(cx0, cz0 + dz, "E");
+          openSubEdge(cx0 + 1, cz0 + dz, "E");
+        }
+        for (let dx = 0; dx < 3; dx += 1) {
+          if (cx0 + dx === jutX) {
+            wallS[cz0][cx0 + dx] = true;
+            wallN[cz0 + 1][cx0 + dx] = true;
+          } else {
+            openSubEdge(cx0 + dx, cz0, "S");
+          }
+        }
+      } else {
+        // 2x3 room: leave 1 offset interior partition closed jutting from East/West side
+        const jutZ = cz0 + ((chunkHash >>> 4) % 2 === 0 ? 0 : 2);
+        for (let dx = 0; dx < 2; dx += 1) {
+          openSubEdge(cx0 + dx, cz0, "S");
+          openSubEdge(cx0 + dx, cz0 + 1, "S");
+        }
+        for (let dz = 0; dz < 3; dz += 1) {
+          if (cz0 + dz === jutZ) {
+            wallE[cz0 + dz][cx0] = true;
+            wallW[cz0 + dz][cx0 + 1] = true;
+          } else {
+            openSubEdge(cx0, cz0 + dz, "E");
+          }
+        }
+      }
+      chamberRect = { sx: cx0, sz: cz0, w: rw, d: rd };
+      break;
+    }
+  }
+
+  if (!chamberRect) {
+    for (let tryIdx = 0; tryIdx < 64; tryIdx += 1) {
+      const cx0 = 1 + ((tryIdx * 3 + (chunkHash % 5)) % 5);
+      const cz0 = 1 + ((tryIdx * 5 + ((chunkHash >>> 5) % 5)) % 5);
+      const four = [
+        [cx0, cz0],
+        [cx0 + 1, cz0],
+        [cx0, cz0 + 1],
+        [cx0 + 1, cz0 + 1],
+      ];
+      if (four.some(([x, z]) => blocked[z][x])) continue;
+      const minWX = originX + cx0 * L0_SUB_SIZE;
+      const maxWX = minWX + 2 * L0_SUB_SIZE;
+      const minWZ = originZ + cz0 * L0_SUB_SIZE;
+      const maxWZ = minWZ + 2 * L0_SUB_SIZE;
+      const hitsLandmark = landmarkBoxes.some(
+        (b) => maxWX > b.minX - 0.3 && minWX < b.maxX + 0.3 && maxWZ > b.minZ - 0.3 && minWZ < b.maxZ + 0.3
+      );
+      if (hitsLandmark) continue;
+
+      openSubEdge(cx0, cz0, "E");
+      openSubEdge(cx0, cz0, "S");
+      openSubEdge(cx0 + 1, cz0, "S");
+      openSubEdge(cx0, cz0 + 1, "E");
+      chamberRect = { sx: cx0, sz: cz0, w: 2, d: 2 };
+      chamberCenter = {
+        x: originX + (cx0 + 1) * L0_SUB_SIZE,
+        z: originZ + (cz0 + 1) * L0_SUB_SIZE,
+        sx: cx0,
+        sz: cz0,
+      };
+      break;
+    }
   }
 
   if (chamberCenter && (isInitialOrigin || chunkHash % 2 === 0)) {
@@ -639,6 +708,8 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
   const nsWallSegments = [];
   let archCount = 0;
   let wallSegmentCount = 0;
+  let forceNextArchSz = -1;
+  let forceNextArchSx = -1;
 
   for (let sz = 0; sz <= N; sz += 1) {
     for (let sx = 0; sx < N; sx += 1) {
@@ -655,9 +726,19 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
         sx <= N - 2 &&
         !blocked[sz - 1]?.[sx] &&
         !blocked[sz]?.[sx];
-      const useArch = canArch && archCount < (isInitialOrigin ? 2 : 3) && ((sx * 5 + sz * 7 + chunkHash) % 11 === 0);
+      const maxArchQuota = isInitialOrigin ? 3 : 4;
+      const isForcedPair = sz === forceNextArchSz && sx === forceNextArchSx && canArch && archCount < maxArchQuota;
+      const useArch =
+        isForcedPair ||
+        (canArch && archCount < maxArchQuota && ((sx * 5 + sz * 7 + chunkHash) % 11 === 0));
       const style = useArch ? "arched_divider" : "maze_wall_ew";
-      if (useArch) archCount += 1;
+      if (useArch) {
+        archCount += 1;
+        if (!isForcedPair && archCount < maxArchQuota) {
+          forceNextArchSz = sz;
+          forceNextArchSx = sx + 1;
+        }
+      }
 
       const seg = {
         lx: Math.min(CHUNK_CELLS - 1, Math.floor((wx - originX) / CELL_SIZE)),
@@ -672,19 +753,24 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
         height: ceilH,
       };
       walls.push(seg);
-      ewWallSegments.push({ seg, wx, wz, sz, sx });
+      ewWallSegments.push({ seg, wx, wz, sz, sx, canArch });
       wallSegmentCount += 1;
     }
   }
 
-  // Guarantee >= 1 arched_divider in initial (0,0) (and colonnade chunks)
+  // Guarantee >= 1 arched_divider (preferably 2-arch colonnade pair) in initial (0,0) and colonnade chunks
   if (archCount === 0 && (isInitialOrigin || chunkHash % 3 === 2)) {
-    const fallbackArch = ewWallSegments.find(
-      (e) => e.sz >= 2 && e.sz <= N - 2 && e.sx >= 1 && e.sx <= N - 2 && !blocked[e.sz - 1]?.[e.sx] && !blocked[e.sz]?.[e.sx]
-    );
+    const fallbackArch = ewWallSegments.find((e) => e.canArch);
     if (fallbackArch) {
       fallbackArch.seg.wallStyle = "arched_divider";
       archCount += 1;
+      const pairArch = ewWallSegments.find(
+        (e) => e.sz === fallbackArch.sz && e.sx === fallbackArch.sx + 1 && e.canArch
+      );
+      if (pairArch) {
+        pairArch.seg.wallStyle = "arched_divider";
+        archCount += 1;
+      }
     }
   }
 
@@ -822,13 +908,34 @@ function generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelDa
     }
   }
 
-  // Sparse, irregular fluorescent ceiling fixtures (5-7/chunk, >= 4 in 0,0) leaving dead-ends murky
+  // Linear fluorescent troffer row inside primary chamber (File:Thebackrooms.jpg) + sparse corridor fixtures
+  if (chamberRect) {
+    const alongX = chamberRect.w >= chamberRect.d;
+    const count = Math.max(chamberRect.w, chamberRect.d);
+    const fixedCoord = alongX ? chamberRect.sz : chamberRect.sx;
+    for (let k = 0; k < count; k += 1) {
+      const lsx = alongX ? chamberRect.sx + k : fixedCoord;
+      const lsz = alongX ? fixedCoord : chamberRect.sz + k;
+      if (blocked[lsz]?.[lsx]) continue;
+      const wx = originX + (lsx + 0.5) * L0_SUB_SIZE;
+      const wz = originZ + (lsz + 0.5) * L0_SUB_SIZE;
+      if (lights.some((lt) => Math.hypot(lt.x - wx, lt.z - wz) < 2.5)) continue;
+      lights.push({
+        x: wx,
+        y: ceilH - 0.04,
+        z: wz,
+        rotY: alongX ? Math.PI * 0.5 : 0,
+        flickerPhase: ((lsx * 7 + lsz * 13 + Math.abs(cx + cz)) % 17) * 0.37,
+      });
+    }
+  }
+
   const targetLights = Math.min(walkableSubs.length, isInitialOrigin ? 6 : 5 + (chunkHash % 3));
   const preferredLights = walkableSubs.filter((s) => s.deg >= 2);
   const lightPool = preferredLights.length >= 4 ? preferredLights : walkableSubs;
   for (let i = 0; i < lightPool.length && lights.length < targetLights; i += 1) {
     const c = lightPool[(i * 7 + (chunkHash % Math.max(1, lightPool.length))) % lightPool.length];
-    if (lights.some((lt) => Math.hypot(lt.x - c.wx, lt.z - c.wz) < 5.2)) continue;
+    if (lights.some((lt) => Math.hypot(lt.x - c.wx, lt.z - c.wz) < 4.6)) continue;
     lights.push({
       x: c.wx + (rng() - 0.5) * 0.28,
       y: ceilH - 0.04,
@@ -902,7 +1009,10 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
   let propColliders = [];
   let prebuiltWalls = null;
   let mazeMeta = null;
-  const zoneTag = `${String.fromCharCode(65 + Math.abs(cx * 3 + cz) % 6)}${Math.abs(cx + cz * 2) % 9 + 1}`;
+  const zoneTag =
+    levelId === "level_1"
+      ? `${cx === 0 && cz === 0 ? 2 : 1 + (Math.abs(cx * 37 + cz * 71 + seedNum) % 2000)}F`
+      : `${String.fromCharCode(65 + Math.abs(cx * 3 + cz) % 6)}${Math.abs(cx + cz * 2) % 9 + 1}`;
 
   if (levelId === "level_0") {
     const l0 = generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelData });
@@ -980,16 +1090,18 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
       wallStyles[7][7] = "manila_wall";
     }
   } else if (levelId === "level_1") {
-    // Wide concrete parking deck with structural pillars, curbs, arrows, ramps & puddles
+    // Wide parking deck & warehouse fusion: square/cylindrical floor-numbered pillars, sparser cars, exits & puddles
+    const l1RoundPillars = !(cx === 0 && cz === 0) && Math.abs(cx + cz * 2) % 3 === 1;
+    const pillarStyle = l1RoundPillars ? "parking_pillar_round" : "parking_pillar";
     for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
       for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
         if ((lx === 1 || lx === 5) && (lz === 1 || lz === 5)) {
           grid[lz][lx] = CELL_TYPES.PILLAR;
-          wallStyles[lz][lx] = "parking_pillar";
+          wallStyles[lz][lx] = pillarStyle;
         } else if (Math.abs(cx * 3 + cz) % 4 === 2 && lz === 4 && lx >= 2 && lx <= 5) {
           grid[lz][lx] = CELL_TYPES.WALL;
           wallStyles[lz][lx] = "solid";
-        } else if (rng() < 0.045) {
+        } else if (rng() < 0.018) {
           grid[lz][lx] = CELL_TYPES.CAR;
         } else if (rng() < 0.13) {
           grid[lz][lx] = CELL_TYPES.PUDDLE;
@@ -1075,13 +1187,15 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
       });
 
       // Fake Exit sign above blank wall & sloped parking ramp (File:Level 1.jpg & lore)
-      props.push({ kind: "FAKE_EXIT_SIGN", x: outRect.centerX, z: outRect.minZ - 0.04 });
+      props.push({ kind: "FAKE_EXIT_SIGN", x: outRect.centerX, z: outRect.minZ - 0.04, rotY: Math.PI, signLang: "EXIT" });
       props.push({ kind: "PARKING_RAMP", x: 4.5, z: 21.0 });
 
-      // Decorative Warehouse wood door (North face) & jet-black Maintenance Hall door (South face)
+      // Decorative Warehouse brown wood door (North face), jet-black Maintenance Hall door (South face) & wall outlets
       const subWall = cellWorldRect(cx, cz, 4, 5);
-      props.push({ kind: "WAREHOUSE_DOOR", x: subWall.centerX, z: subWall.minZ - 0.05, rotY: Math.PI });
+      props.push({ kind: "WAREHOUSE_DOOR", x: subWall.centerX, z: subWall.minZ - 0.05, rotY: Math.PI, doorVariant: "brown" });
       props.push({ kind: "MAINT_DOOR", x: subWall.centerX, z: subWall.maxZ + 0.05, rotY: 0 });
+      props.push({ kind: "WALL_OUTLET", x: outRect.centerX, z: outRect.minZ - 0.02, rotY: Math.PI });
+      props.push({ kind: "WALL_OUTLET", x: subWall.minX + 0.45, z: subWall.minZ - 0.02, rotY: Math.PI });
 
       // Protruding rusty rebar near structural concrete bases
       props.push({ kind: "REBAR_CLUSTER", x: 6.1, z: 16.5, rotY: 0.4 });
@@ -1157,7 +1271,9 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
       });
     }
 
-    // Emit concrete-floor Hydrolitis & False Puddle meshes, scattered rebar, sub-area doors, and pedestal colliders
+    // Emit Hydrolitis & False Puddle meshes, rebar, warehouse/maintenance doors, fake exit signs, wall outlets & pedestals
+    const L1_EXIT_SIGNS = ["EXIT", "出口", "SORTIE", "SALIDA", "AUSGANG"];
+    const L1_DOOR_VARIANTS = ["brown", "pink", "white"];
     for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
       for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
         const cell = grid[lz][lx];
@@ -1184,15 +1300,45 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
             yOffset: 0.012 + ((lx * 3 + lz * 5) % 5) * 0.002,
             isFalsePuddle,
           });
-        } else if (cell === CELL_TYPES.WALL && wallStyles[lz][lx] === "solid" && !(cx === 0 && cz === 0 && lx === 4 && lz === 5)) {
-          if (lz > 0 && !SOLID_CELL_TYPES.has(grid[lz - 1][lx]) && rng() < 0.45) {
+        } else if (
+          cell === CELL_TYPES.WALL &&
+          wallStyles[lz][lx] === "solid" &&
+          !(cx === 0 && cz === 0 && ((lx === 4 && lz === 5) || (lx === 6 && lz === 4)))
+        ) {
+          const faceNorth = lz > 0 && !SOLID_CELL_TYPES.has(grid[lz - 1][lx]);
+          const faceSouth = lz < CHUNK_CELLS - 1 && !SOLID_CELL_TYPES.has(grid[lz + 1][lx]);
+          if (faceNorth || faceSouth) {
             const r = cellWorldRect(cx, cz, lx, lz);
-            props.push({
-              kind: rng() < 0.5 ? "MAINT_DOOR" : "WAREHOUSE_DOOR",
-              x: r.centerX,
-              z: r.minZ - 0.05,
-              rotY: Math.PI,
-            });
+            const faceZ = faceNorth ? r.minZ - 0.05 : r.maxZ + 0.05;
+            const rotY = faceNorth ? Math.PI : 0;
+            const roll = rng();
+            if (roll < 0.24) {
+              props.push({ kind: "MAINT_DOOR", x: r.centerX, z: faceZ, rotY });
+            } else if (roll < 0.48) {
+              props.push({
+                kind: "WAREHOUSE_DOOR",
+                x: r.centerX,
+                z: faceZ,
+                rotY,
+                doorVariant: L1_DOOR_VARIANTS[(lx + lz + Math.abs(cx + cz)) % 3],
+              });
+            } else if (roll < 0.72) {
+              props.push({
+                kind: "FAKE_EXIT_SIGN",
+                x: r.centerX,
+                z: faceNorth ? r.minZ - 0.04 : r.maxZ + 0.04,
+                rotY,
+                signLang: L1_EXIT_SIGNS[Math.abs(cx * 3 + cz * 5 + lx + lz) % L1_EXIT_SIGNS.length],
+              });
+            }
+            if (rng() < 0.35) {
+              props.push({
+                kind: "WALL_OUTLET",
+                x: r.centerX + (roll < 0.48 ? 0.95 : 0),
+                z: faceNorth ? r.minZ - 0.02 : r.maxZ + 0.02,
+                rotY,
+              });
+            }
           }
         } else if (!SOLID_CELL_TYPES.has(cell) && cell !== CELL_TYPES.PUDDLE && cell !== CELL_TYPES.STAIRS && rng() < 0.05) {
           const r = cellWorldRect(cx, cz, lx, lz);
@@ -1212,6 +1358,14 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
       if (!SOLID_CELL_TYPES.has(grid[3][lx])) {
         for (const sxLine of [rStop.minX + 0.08, rStop.maxX - 0.08]) {
           props.push({ kind: "PARKING_LINE", x: sxLine, z: rStop.centerZ + 0.15, w: 0.11, d: 3.1 });
+        }
+      }
+    }
+    for (const lx of [2, 3, 6]) {
+      if (grid[1][lx] === CELL_TYPES.EMPTY || grid[1][lx] === CELL_TYPES.CAR) {
+        const rBay = cellWorldRect(cx, cz, lx, 1);
+        for (const sxLine of [rBay.minX + 0.08, rBay.maxX - 0.08]) {
+          props.push({ kind: "PARKING_LINE", x: sxLine, z: rBay.centerZ, w: 0.11, d: 2.85 });
         }
       }
     }

@@ -248,7 +248,7 @@ export const LEVELS = Object.freeze({
     environment: {
       ceilingHeight: 4.6,
       fogColor: 0x3a3f42,
-      fogDensity: 0.024,
+      fogDensity: 0.03,
       ambientColor: 0xd0d8de,
       ambientIntensity: 0.44,
       hemiSkyColor: 0xe4edf5,
@@ -264,7 +264,7 @@ export const LEVELS = Object.freeze({
       temperatureC: 27.0,
       humidity: "High humidity fog from Hydrolitis puddles (27-50C)",
       description:
-        "2,000階層に及ぶ巨大コンクリート・アスファルト駐車場と倉庫の融合空間。暗いアスファルト路面上に無銘の故障車、階数を示す柱、Hydrolitis水たまりと偽水たまり（False Puddles）、突き出た錆鉄筋、給電可能な壁コンセント、突発停電（Blackout）が発生する。",
+        "2,000階層に及ぶ広大な立体駐車場と倉庫（天井高4〜5m）の融合空間。無塗装ひび割れコンクリート壁・暗いアスファルト路面・茶/ピンク/白木製扉の倍高倉庫・黒色金属扉の保守通路を備え、階数を記した角柱・円柱、多言語の偽出口標識、希少な無銘車、Hydrolitis水たまりと偽水たまり（False Puddles）、突き出た錆鉄筋、停電時に通電停止する壁コンセントが発生する。",
     },
     textures: {
       wall: {
@@ -335,11 +335,12 @@ export const LEVELS = Object.freeze({
       },
     ],
     ambientLogs: [
-      "[LEVEL 1] 天井高4.6mの暗いアスファルト駐車場・倉庫。Hydrolitis水たまりの湿気霧と突き出し鉄筋に注意。",
+      "[LEVEL 1] 2,000階層に及ぶ暗いアスファルト駐車場・倉庫（天井高4.6m）。柱の階数標記とHydrolitis霧・錆鉄筋に注意。",
+      "[ARCHITECTURE] 茶・ピンク・白の木製扉の奥には倉庫、黒金属扉の奥には保守通路。偽出口標識や希少な無銘車も点在。",
       "[HAZARD] 濁った水たまりは False Puddle（深さ1.5〜3.6mの歯付き捕食穴）の可能性があります。",
-      "[BLACKOUT] 突発停電が発生すると Smilers が活動します。懐中電灯 (F) を確保してください。",
+      "[BLACKOUT] 突発停電時は壁コンセントも給電停止し Smilers が活動します。懐中電灯 (F) を確保してください。",
       "[HUB ROUTE] 階段2階分往復→分岐を左→右→Door [B] 通過後に反対側の Door [A] で The Hub へ到達。",
-      "[EXITS] 階段や扉で Level 0 / 2、コンセント付き壁のノークリップ (N) は Wiki上 Level 188 等へ通じます。",
+      "[EXITS] 階段や無施錠扉で Level 0 / 2、コンセント付き壁のノークリップ (N) は Wiki上 Level 188 等へ通じます。",
     ],
   },
 
