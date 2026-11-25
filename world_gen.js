@@ -995,11 +995,21 @@ function cellWorldRect(cx, cz, lx, lz, insetX = 0, insetZ = insetX) {
  * Pure deterministic chunk generator. Identical inputs always yield identical
  * deep JSON output across browser, Node tests, and Godot port reference.
  */
-export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch = 0) {
+export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch = 0, floorNumber = null) {
   const levelData = getLevelData(levelId);
   const seedNum = Number(worldSeed) || 1999;
   const epoch = levelId === "level_0" ? Math.max(0, Number(shiftEpoch) || 0) : 0;
-  const chunkHash = hashCoords(seedNum, levelId, cx, cz, epoch * 131);
+  const l1Floor =
+    levelId === "level_1"
+      ? Math.max(1, Math.min(2000, Math.trunc(Number(floorNumber ?? 2) || 2)))
+      : 2;
+  const hashSalt =
+    levelId === "level_0"
+      ? epoch * 131
+      : levelId === "level_1" && l1Floor !== 2
+      ? l1Floor * 997
+      : 0;
+  const chunkHash = hashCoords(seedNum, levelId, cx, cz, hashSalt);
   const rng = createMulberry32(chunkHash);
   let grid = makeEmptyGrid();
   const wallStyles = makeWallStyleGrid();
@@ -1007,12 +1017,11 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
   let interactables = [];
   let props = [];
   let propColliders = [];
+  let subZones = [];
   let prebuiltWalls = null;
   let mazeMeta = null;
-  const zoneTag =
-    levelId === "level_1"
-      ? `${cx === 0 && cz === 0 ? 2 : 1 + (Math.abs(cx * 37 + cz * 71 + seedNum) % 2000)}F`
-      : `${String.fromCharCode(65 + Math.abs(cx * 3 + cz) % 6)}${Math.abs(cx + cz * 2) % 9 + 1}`;
+  const sector = `${String.fromCharCode(65 + Math.abs(cx * 3 + cz) % 6)}${Math.abs(cx + cz * 2) % 9 + 1}`;
+  const zoneTag = levelId === "level_1" ? `${l1Floor}F-${sector}` : sector;
 
   if (levelId === "level_0") {
     const l0 = generateLevel0ThinWallMaze({ cx, cz, seedNum, chunkHash, epoch, levelData });
@@ -1090,9 +1099,21 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
       wallStyles[7][7] = "manila_wall";
     }
   } else if (levelId === "level_1") {
-    // Wide parking deck & warehouse fusion: square/cylindrical floor-numbered pillars, sparser cars, exits & puddles
+    // Wide concrete parking deck & warehouse/maintenance fusion:
+    // consistent floor-numbered pillars, sparse cars, enterable double-height Warehouses,
+    // clean white-walled Maintenance Halls, floor stairwells & puddles.
     const l1RoundPillars = !(cx === 0 && cz === 0) && Math.abs(cx + cz * 2) % 3 === 1;
     const pillarStyle = l1RoundPillars ? "parking_pillar_round" : "parking_pillar";
+    const isWarehouseChunk =
+      !(cx === 0 && cz === 0) &&
+      !(cx === 1 && cz === 0) &&
+      ((cx === 0 && cz === 1) || Math.abs(cx * 5 + cz * 3) % 5 === 2);
+    const isMaintChunk =
+      !(cx === 0 && cz === 0) &&
+      !(cx === 1 && cz === 0) &&
+      !isWarehouseChunk &&
+      ((cx === 0 && cz === -1) || Math.abs(cx * 7 + cz * 5) % 6 === 3);
+
     for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
       for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
         if ((lx === 1 || lx === 5) && (lz === 1 || lz === 5)) {
@@ -1112,6 +1133,10 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
     carveCorridor(grid, 0, 2, 7, 2);
     applyCrossChunkSeams(grid, seedNum, levelId, cx, cz);
 
+    const baseChunkX = cx * CHUNK_WORLD_SIZE;
+    const baseChunkZ = cz * CHUNK_WORLD_SIZE;
+    const L1_DOOR_VARIANTS = ["brown", "pink", "white"];
+
     if (cx === 0 && cz === 0) {
       for (let lz = 0; lz <= 2; lz += 1) {
         for (let lx = 0; lx <= 2; lx += 1) {
@@ -1127,6 +1152,7 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
       grid[1][3] = CELL_TYPES.CAR;
       grid[5][2] = CELL_TYPES.STAIRS;
       grid[2][5] = CELL_TYPES.STAIRS;
+      grid[1][6] = CELL_TYPES.STAIRS;
       grid[4][4] = CELL_TYPES.KEY_PEDESTAL;
       grid[4][6] = CELL_TYPES.OUTLET_WALL;
       wallStyles[4][6] = "solid";
@@ -1160,6 +1186,19 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
         context: { targetLevelId: "level_2" },
       });
 
+      const sUp = cellWorldRect(cx, cz, 6, 1);
+      interactables.push({
+        id: "l1_floor_stairs_up",
+        type: "STAIRS",
+        triggerType: "FLOOR_STAIRS",
+        label: `駐車場 上階階段 → ${((l1Floor % 2000) + 1)}F へ移動 (Eキー)`,
+        x: sUp.centerX,
+        z: sUp.centerZ,
+        lx: 6,
+        lz: 1,
+        context: { delta: 1 },
+      });
+
       const kp = cellWorldRect(cx, cz, 4, 4);
       interactables.push({
         id: "l1_key_pedestal",
@@ -1190,10 +1229,11 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
       props.push({ kind: "FAKE_EXIT_SIGN", x: outRect.centerX, z: outRect.minZ - 0.04, rotY: Math.PI, signLang: "EXIT" });
       props.push({ kind: "PARKING_RAMP", x: 4.5, z: 21.0 });
 
-      // Decorative Warehouse brown wood door (North face), jet-black Maintenance Hall door (South face) & wall outlets
+      // Decorative Warehouse brown wood door (North face), jet-black Maintenance Hall door (South face), corrugated wall & outlets
       const subWall = cellWorldRect(cx, cz, 4, 5);
       props.push({ kind: "WAREHOUSE_DOOR", x: subWall.centerX, z: subWall.minZ - 0.05, rotY: Math.PI, doorVariant: "brown" });
       props.push({ kind: "MAINT_DOOR", x: subWall.centerX, z: subWall.maxZ + 0.05, rotY: 0 });
+      props.push({ kind: "CORRUGATED_WALL", x: outRect.centerX, z: outRect.maxZ + 0.04, w: 2.85, rotY: 0 });
       props.push({ kind: "WALL_OUTLET", x: outRect.centerX, z: outRect.minZ - 0.02, rotY: Math.PI });
       props.push({ kind: "WALL_OUTLET", x: subWall.minX + 0.45, z: subWall.minZ - 0.02, rotY: Math.PI });
 
@@ -1208,8 +1248,29 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
       }
       grid[3][3] = CELL_TYPES.WALL;
       wallStyles[3][3] = "solid";
+      grid[3][4] = CELL_TYPES.WALL;
+      wallStyles[3][4] = "solid";
       grid[3][2] = CELL_TYPES.DOOR;
       grid[3][5] = CELL_TYPES.DOOR;
+
+      // Frame Door B & Door A inside concrete corridor walls (keeping border cells open)
+      const doorBFlankX = baseChunkX + 5.2;
+      const doorAFlankX = baseChunkX + 18.8;
+      const midZ = baseChunkZ + 10.5;
+      for (const [fx, fz, fw, fd] of [
+        [doorBFlankX, midZ, 1.5, 0.34],
+        [doorAFlankX, midZ, 1.5, 0.34],
+      ]) {
+        props.push({ kind: "SUBZONE_WALL", x: fx, z: fz, w: fw, d: fd, height: levelData.environment.ceilingHeight, style: "concrete" });
+        propColliders.push({
+          kind: "SUBZONE_WALL",
+          minX: fx - fw * 0.5,
+          maxX: fx + fw * 0.5,
+          minZ: fz - fd * 0.5,
+          maxZ: fz + fd * 0.5,
+          height: levelData.environment.ceilingHeight,
+        });
+      }
 
       const arrLeft = cellWorldRect(cx, cz, 1, 2);
       const arrRight = cellWorldRect(cx, cz, 2, 4);
@@ -1255,6 +1316,134 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
         lz: 3,
         context: { doorLabel: "A" },
       });
+    } else if (isWarehouseChunk) {
+      // Enterable double-height Warehouse chamber (x in [9..20.4], z in [9..20.4])
+      for (let lz = 3; lz <= 6; lz += 1) {
+        for (let lx = 3; lx <= 6; lx += 1) {
+          grid[lz][lx] = CELL_TYPES.EMPTY;
+        }
+      }
+      const wMinX = baseChunkX + 9.0;
+      const wMaxX = baseChunkX + 20.4;
+      const wMinZ = baseChunkZ + 9.0;
+      const wMaxZ = baseChunkZ + 20.4;
+      const doorCx = baseChunkX + 12.0;
+      const doorHalf = 1.25;
+      const hGarage = levelData.environment.ceilingHeight;
+      const variant = L1_DOOR_VARIANTS[Math.abs(cx + cz * 3) % 3];
+
+      subZones.push({ kind: "warehouse", minX: wMinX, maxX: wMaxX, minZ: wMinZ, maxZ: wMaxZ });
+
+      // Thin concrete perimeter walls with open 2.5m doorway at North (z=wMinZ, x=doorCx)
+      const wallSegments = [
+        [wMinX + (doorCx - doorHalf - wMinX) * 0.5, wMinZ, doorCx - doorHalf - wMinX, 0.30],
+        [doorCx + doorHalf + (wMaxX - (doorCx + doorHalf)) * 0.5, wMinZ, wMaxX - (doorCx + doorHalf), 0.30],
+        [(wMinX + wMaxX) * 0.5, wMaxZ, wMaxX - wMinX, 0.30],
+        [wMinX, (wMinZ + wMaxZ) * 0.5, 0.30, wMaxZ - wMinZ],
+        [wMaxX, (wMinZ + wMaxZ) * 0.5, 0.30, wMaxZ - wMinZ],
+      ];
+      for (const [wx, wz, ww, wd] of wallSegments) {
+        if (ww <= 0.05 || wd <= 0.05) continue;
+        props.push({ kind: "SUBZONE_WALL", x: wx, z: wz, w: ww, d: wd, height: hGarage, style: "concrete" });
+        propColliders.push({
+          kind: "SUBZONE_WALL",
+          minX: wx - ww * 0.5,
+          maxX: wx + ww * 0.5,
+          minZ: wz - wd * 0.5,
+          maxZ: wz + wd * 0.5,
+          height: hGarage,
+        });
+      }
+
+      // Ajar wooden warehouse entry door (brown / pink / white per Wiki) + double-height vault + shutter + racks + white truck
+      props.push({ kind: "WAREHOUSE_ENTRY_DOOR", x: doorCx, z: wMinZ, doorVariant: variant });
+      props.push({ kind: "WAREHOUSE_VAULT", minX: wMinX, maxX: wMaxX, minZ: wMinZ, maxZ: wMaxZ, baseHeight: hGarage, topHeight: hGarage + 3.8 });
+      props.push({ kind: "WAREHOUSE_SHUTTER", x: baseChunkX + 16.8, z: wMaxZ - 0.20, w: 3.4, rotY: Math.PI });
+
+      for (const rz of [baseChunkZ + 13.8, baseChunkZ + 17.6]) {
+        const rx = baseChunkX + 10.6;
+        props.push({ kind: "WAREHOUSE_RACK", x: rx, z: rz, w: 1.1, d: 2.5 });
+        propColliders.push({
+          kind: "WAREHOUSE_RACK",
+          minX: rx - 0.55,
+          maxX: rx + 0.55,
+          minZ: rz - 1.25,
+          maxZ: rz + 1.25,
+          height: 3.2,
+        });
+      }
+
+      const tx = baseChunkX + 17.2;
+      const tz = baseChunkZ + 15.2;
+      props.push({ kind: "WHITE_TRUCK", x: tx, z: tz, w: 2.35, d: 5.5 });
+      propColliders.push({
+        kind: "WHITE_TRUCK",
+        minX: tx - 1.18,
+        maxX: tx + 1.18,
+        minZ: tz - 2.75,
+        maxZ: tz + 2.75,
+        height: 2.9,
+      });
+
+      lights.push({ x: baseChunkX + 13.2, y: hGarage + 3.45, z: baseChunkZ + 13.5, rotY: 0, flickerPhase: 0.2, subZone: "warehouse", lightTint: 0xffe4b8 });
+      lights.push({ x: baseChunkX + 17.4, y: hGarage + 3.45, z: baseChunkZ + 16.5, rotY: 0, flickerPhase: 0.8, subZone: "warehouse", lightTint: 0xffe4b8 });
+    } else if (isMaintChunk) {
+      // Enterable white-walled Maintenance Hall (x in [9..20.4], z in [9..20.4], dry floor, isolated power)
+      for (let lz = 3; lz <= 6; lz += 1) {
+        for (let lx = 3; lx <= 6; lx += 1) {
+          grid[lz][lx] = CELL_TYPES.EMPTY;
+        }
+      }
+      const mMinX = baseChunkX + 9.0;
+      const mMaxX = baseChunkX + 20.4;
+      const mMinZ = baseChunkZ + 9.0;
+      const mMaxZ = baseChunkZ + 20.4;
+      const doorCx = baseChunkX + 12.0;
+      const doorHalf = 1.2;
+      const hGarage = levelData.environment.ceilingHeight;
+
+      subZones.push({ kind: "maintenance", minX: mMinX, maxX: mMaxX, minZ: mMinZ, maxZ: mMaxZ });
+
+      // White painted walls with open South jet-black metal door facing (0,0) + interior L-turn partition
+      const maintWalls = [
+        [(mMinX + mMaxX) * 0.5, mMinZ, mMaxX - mMinX, 0.30],
+        [mMinX + (doorCx - doorHalf - mMinX) * 0.5, mMaxZ, doorCx - doorHalf - mMinX, 0.30],
+        [doorCx + doorHalf + (mMaxX - (doorCx + doorHalf)) * 0.5, mMaxZ, mMaxX - (doorCx + doorHalf), 0.30],
+        [mMinX, (mMinZ + mMaxZ) * 0.5, 0.30, mMaxZ - mMinZ],
+        [mMaxX, (mMinZ + mMaxZ) * 0.5, 0.30, mMaxZ - mMinZ],
+        [baseChunkX + 14.8, baseChunkZ + 16.6, 0.28, 7.2],
+      ];
+      for (const [wx, wz, ww, wd] of maintWalls) {
+        if (ww <= 0.05 || wd <= 0.05) continue;
+        props.push({ kind: "SUBZONE_WALL", x: wx, z: wz, w: ww, d: wd, height: hGarage, style: "maint_white" });
+        propColliders.push({
+          kind: "SUBZONE_WALL",
+          minX: wx - ww * 0.5,
+          maxX: wx + ww * 0.5,
+          minZ: wz - wd * 0.5,
+          maxZ: wz + wd * 0.5,
+          height: hGarage,
+        });
+      }
+
+      props.push({ kind: "MAINT_ENTRY_DOOR", x: doorCx, z: mMaxZ });
+      props.push({ kind: "MAINT_BREAKER", x: baseChunkX + 9.24, z: baseChunkZ + 15.0, rotY: Math.PI / 2 });
+      props.push({ kind: "MAINT_ALMOND_PIPE", x: baseChunkX + 14.58, z: baseChunkZ + 14.8, rotY: -Math.PI / 2 });
+
+      const tableX = baseChunkX + 18.4;
+      const tableZ = baseChunkZ + 12.2;
+      props.push({ kind: "MAINT_CLUTTER", x: tableX, z: tableZ });
+      propColliders.push({
+        kind: "MAINT_CLUTTER",
+        minX: tableX - 0.9,
+        maxX: tableX + 0.9,
+        minZ: tableZ - 0.55,
+        maxZ: tableZ + 0.55,
+        height: 1.0,
+      });
+
+      lights.push({ x: baseChunkX + 12.0, y: hGarage - 0.14, z: baseChunkZ + 13.0, rotY: 0, flickerPhase: 0.1, subZone: "maintenance", lightTint: 0xf6fbff });
+      lights.push({ x: baseChunkX + 17.6, y: hGarage - 0.14, z: baseChunkZ + 16.4, rotY: 0, flickerPhase: 0.6, subZone: "maintenance", lightTint: 0xf6fbff });
     } else if (chunkHash % 9 === 0) {
       grid[4][4] = CELL_TYPES.KEY_PEDESTAL;
       const kp = cellWorldRect(cx, cz, 4, 4);
@@ -1271,9 +1460,11 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
       });
     }
 
-    // Emit Hydrolitis & False Puddle meshes, rebar, warehouse/maintenance doors, fake exit signs, wall outlets & pedestals
+    const inSubZone = (wx, wz) =>
+      subZones.some((sz) => wx >= sz.minX - 0.5 && wx <= sz.maxX + 0.5 && wz >= sz.minZ - 0.5 && wz <= sz.maxZ + 0.5);
+
+    // Emit Hydrolitis & False Puddle meshes, rebar, warehouse/maintenance doors, corrugated walls, fake exit signs, wall outlets & pedestals
     const L1_EXIT_SIGNS = ["EXIT", "出口", "SORTIE", "SALIDA", "AUSGANG"];
-    const L1_DOOR_VARIANTS = ["brown", "pink", "white"];
     for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
       for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
         const cell = grid[lz][lx];
@@ -1281,14 +1472,15 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
           const kp = cellWorldRect(cx, cz, lx, lz);
           propColliders.push({
             kind: "KEY_PEDESTAL",
-            minX: kp.centerX - 0.38,
-            maxX: kp.centerX + 0.38,
-            minZ: kp.centerZ - 0.38,
-            maxZ: kp.centerZ + 0.38,
-            height: 0.92,
+            minX: kp.centerX - 0.42,
+            maxX: kp.centerX + 0.42,
+            minZ: kp.centerZ - 0.42,
+            maxZ: kp.centerZ + 0.42,
+            height: 0.78,
           });
         } else if (cell === CELL_TYPES.PUDDLE) {
           const r = cellWorldRect(cx, cz, lx, lz);
+          if (inSubZone(r.centerX, r.centerZ)) continue;
           const isOriginNormal = cx === 0 && cz === 0 && ((lx === 3 && lz === 2) || (lx === 2 && lz === 4));
           const isOriginFalse = cx === 0 && cz === 0 && lx === 3 && lz === 3;
           const isFalsePuddle = isOriginFalse ? true : isOriginNormal ? false : rng() < 0.24;
@@ -1312,9 +1504,9 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
             const faceZ = faceNorth ? r.minZ - 0.05 : r.maxZ + 0.05;
             const rotY = faceNorth ? Math.PI : 0;
             const roll = rng();
-            if (roll < 0.24) {
+            if (roll < 0.22) {
               props.push({ kind: "MAINT_DOOR", x: r.centerX, z: faceZ, rotY });
-            } else if (roll < 0.48) {
+            } else if (roll < 0.44) {
               props.push({
                 kind: "WAREHOUSE_DOOR",
                 x: r.centerX,
@@ -1322,7 +1514,7 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
                 rotY,
                 doorVariant: L1_DOOR_VARIANTS[(lx + lz + Math.abs(cx + cz)) % 3],
               });
-            } else if (roll < 0.72) {
+            } else if (roll < 0.68) {
               props.push({
                 kind: "FAKE_EXIT_SIGN",
                 x: r.centerX,
@@ -1330,11 +1522,19 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
                 rotY,
                 signLang: L1_EXIT_SIGNS[Math.abs(cx * 3 + cz * 5 + lx + lz) % L1_EXIT_SIGNS.length],
               });
+            } else {
+              props.push({
+                kind: "CORRUGATED_WALL",
+                x: r.centerX,
+                z: faceNorth ? r.minZ - 0.04 : r.maxZ + 0.04,
+                w: 2.85,
+                rotY,
+              });
             }
             if (rng() < 0.35) {
               props.push({
                 kind: "WALL_OUTLET",
-                x: r.centerX + (roll < 0.48 ? 0.95 : 0),
+                x: r.centerX + (roll < 0.44 ? 0.95 : 0),
                 z: faceNorth ? r.minZ - 0.02 : r.maxZ + 0.02,
                 rotY,
               });
@@ -1342,24 +1542,26 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
           }
         } else if (!SOLID_CELL_TYPES.has(cell) && cell !== CELL_TYPES.PUDDLE && cell !== CELL_TYPES.STAIRS && rng() < 0.05) {
           const r = cellWorldRect(cx, cz, lx, lz);
-          props.push({ kind: "REBAR_CLUSTER", x: r.centerX + 0.7, z: r.centerZ - 0.7, rotY: rng() * Math.PI * 2 });
+          if (!inSubZone(r.centerX, r.centerZ)) {
+            props.push({ kind: "REBAR_CLUSTER", x: r.centerX + 0.7, z: r.centerZ - 0.7, rotY: rng() * Math.PI * 2 });
+          }
         }
       }
     }
 
-    // Parking bay yellow wheel stops, floor directional arrows, white asphalt stall lines, orange barriers, ceiling beams & pipes
-    const baseChunkX = cx * CHUNK_WORLD_SIZE;
-    const baseChunkZ = cz * CHUNK_WORLD_SIZE;
+    // Parking bay yellow wheel stops, floor directional arrows, white concrete stall lines, orange barriers, ceiling beams & pipes
     for (const lx of [2, 6]) {
       const rStop = cellWorldRect(cx, cz, lx, 3);
-      props.push({ kind: "WHEEL_STOP", x: rStop.centerX, z: rStop.centerZ, rotY: 0 });
-      const rArr = cellWorldRect(cx, cz, lx, 2);
-      props.push({ kind: "FLOOR_ARROW", x: rArr.centerX, z: rArr.centerZ, rotY: 0 });
-      if (!SOLID_CELL_TYPES.has(grid[3][lx])) {
-        for (const sxLine of [rStop.minX + 0.08, rStop.maxX - 0.08]) {
-          props.push({ kind: "PARKING_LINE", x: sxLine, z: rStop.centerZ + 0.15, w: 0.11, d: 3.1 });
+      if (!inSubZone(rStop.centerX, rStop.centerZ)) {
+        props.push({ kind: "WHEEL_STOP", x: rStop.centerX, z: rStop.centerZ, rotY: 0 });
+        if (!SOLID_CELL_TYPES.has(grid[3][lx])) {
+          for (const sxLine of [rStop.minX + 0.08, rStop.maxX - 0.08]) {
+            props.push({ kind: "PARKING_LINE", x: sxLine, z: rStop.centerZ + 0.15, w: 0.11, d: 3.1 });
+          }
         }
       }
+      const rArr = cellWorldRect(cx, cz, lx, 2);
+      props.push({ kind: "FLOOR_ARROW", x: rArr.centerX, z: rArr.centerZ, rotY: 0 });
     }
     for (const lx of [2, 3, 6]) {
       if (grid[1][lx] === CELL_TYPES.EMPTY || grid[1][lx] === CELL_TYPES.CAR) {
@@ -1388,14 +1590,24 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
         height: 0.84,
       });
     }
-    props.push({ kind: "OVERHEAD_BEAM", x: baseChunkX + 12.0, z: baseChunkZ + 4.5 });
-    props.push({ kind: "OVERHEAD_BEAM", x: baseChunkX + 12.0, z: baseChunkZ + 16.5 });
-    props.push({ kind: "CEILING_PIPE", x: baseChunkX + 12.0, z: baseChunkZ + 7.5, color: 0xb84a27 });
-    props.push({ kind: "CEILING_PIPE", x: baseChunkX + 12.0, z: baseChunkZ + 13.5, color: 0x9aa2ab });
+
+    const hasSubVault = isWarehouseChunk || isMaintChunk;
+    props.push({ kind: "OVERHEAD_BEAM", x: baseChunkX + 12.0, z: baseChunkZ + 4.5, width: CHUNK_WORLD_SIZE });
+    props.push({ kind: "SPRINKLER_PIPE", x: baseChunkX + 12.0, z: baseChunkZ + 6.8, length: CHUNK_WORLD_SIZE });
+    if (hasSubVault) {
+      props.push({ kind: "OVERHEAD_BEAM", x: baseChunkX + 4.5, z: baseChunkZ + 16.5, width: 9.0 });
+      props.push({ kind: "CEILING_PIPE", x: baseChunkX + 4.5, z: baseChunkZ + 13.5, width: 9.0, color: 0x9aa2ab });
+    } else {
+      props.push({ kind: "OVERHEAD_BEAM", x: baseChunkX + 12.0, z: baseChunkZ + 16.5, width: CHUNK_WORLD_SIZE });
+      props.push({ kind: "CEILING_PIPE", x: baseChunkX + 12.0, z: baseChunkZ + 7.5, width: CHUNK_WORLD_SIZE, color: 0xb84a27 });
+      props.push({ kind: "CEILING_PIPE", x: baseChunkX + 12.0, z: baseChunkZ + 13.5, width: CHUNK_WORLD_SIZE, color: 0x9aa2ab });
+      props.push({ kind: "SPRINKLER_PIPE", x: baseChunkX + 12.0, z: baseChunkZ + 17.2, length: CHUNK_WORLD_SIZE });
+    }
 
     for (const [lx, lz] of [[2, 2], [6, 2], [2, 6], [6, 6]]) {
       if (!SOLID_CELL_TYPES.has(grid[lz][lx])) {
         const r = cellWorldRect(cx, cz, lx, lz);
+        if (inSubZone(r.centerX, r.centerZ)) continue;
         lights.push({
           x: r.centerX,
           y: levelData.environment.ceilingHeight - 0.14,
@@ -1743,16 +1955,40 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
       });
     }
 
-    // 4 continuous overhead pipes along the 4 carved corridors (reduces ~28 small segments to 4)
+    // 4 continuous overhead pipes + sagging conduit cables along the 4 carved corridors
     const l2OriginX = cx * CHUNK_WORLD_SIZE;
     const l2OriginZ = cz * CHUNK_WORLD_SIZE;
+    const isColdZone = Math.abs(cx * 5 + cz * 3) % 3 === 1;
     for (const lane of [1, 5]) {
       const laneOffset = (lane + 0.5) * CELL_SIZE + 0.52;
       props.push({ kind: "OVERHEAD_PIPE", x: l2OriginX + laneOffset, z: l2OriginZ + 12.0, y: 2.46, length: CHUNK_WORLD_SIZE, axis: "z" });
       props.push({ kind: "OVERHEAD_PIPE", x: l2OriginX + 12.0, z: l2OriginZ + laneOffset, y: 2.46, length: CHUNK_WORLD_SIZE, axis: "x" });
+      const cableOffset = (lane + 0.5) * CELL_SIZE - 0.62;
+      props.push({ kind: "CONDUIT_CABLE", x: l2OriginX + cableOffset, z: l2OriginZ + 12.0, y: 2.52, length: CHUNK_WORLD_SIZE, axis: "z" });
+      props.push({ kind: "CONDUIT_CABLE", x: l2OriginX + 12.0, z: l2OriginZ + cableOffset, y: 2.52, length: CHUNK_WORLD_SIZE, axis: "x" });
     }
 
-    // Add wall-hugging chamfered concrete ribs (+ colliders) & corridor-facing multi-tier side pipes
+    // Crumbling brick/mortar seams flanking older wooden sections (Level2main.png)
+    for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
+      for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
+        if (grid[lz][lx] !== CELL_TYPES.WALL || wallStyles[lz][lx] !== "l2_wood") continue;
+        const wr = cellWorldRect(cx, cz, lx, lz);
+        if (lx > 0 && !SOLID_CELL_TYPES.has(grid[lz][lx - 1])) {
+          props.push({ kind: "BRICK_FRAGMENT", x: wr.minX - 0.04, z: wr.centerZ, rotY: Math.PI / 2 });
+        }
+        if (lx < CHUNK_CELLS - 1 && !SOLID_CELL_TYPES.has(grid[lz][lx + 1])) {
+          props.push({ kind: "BRICK_FRAGMENT", x: wr.maxX + 0.04, z: wr.centerZ, rotY: -Math.PI / 2 });
+        }
+        if (lz > 0 && !SOLID_CELL_TYPES.has(grid[lz - 1][lx])) {
+          props.push({ kind: "BRICK_FRAGMENT", x: wr.centerX, z: wr.minZ - 0.04, rotY: 0 });
+        }
+        if (lz < CHUNK_CELLS - 1 && !SOLID_CELL_TYPES.has(grid[lz + 1][lx])) {
+          props.push({ kind: "BRICK_FRAGMENT", x: wr.centerX, z: wr.maxZ + 0.04, rotY: Math.PI });
+        }
+      }
+    }
+
+    // Add wall-hugging chamfered concrete ribs (+ colliders), multi-tier side pipes, risers, floor grates & thermal vents
     for (let lz = 0; lz < CHUNK_CELLS; lz += 1) {
       for (let lx = 0; lx < CHUNK_CELLS; lx += 1) {
         const cell = grid[lz][lx];
@@ -1792,25 +2028,42 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
               });
             }
           }
+        } else if (!(cx === 0 && cz === 0 && lx <= 1 && lz <= 1)) {
+          props.push({ kind: "FLOOR_GRATE", x: r.centerX, z: r.centerZ });
         }
 
         if (leftSolid) props.push({ kind: "SIDE_PIPE_RUN", x: r.minX + 0.16, z: r.centerZ, axis: "z", hasValve: (lx + lz) % 3 === 0 });
         if (rightSolid) props.push({ kind: "SIDE_PIPE_RUN", x: r.maxX - 0.16, z: r.centerZ, axis: "z", hasValve: false });
         if (northSolid) props.push({ kind: "SIDE_PIPE_RUN", x: r.centerX, z: r.minZ + 0.16, axis: "x", hasValve: (lx + lz) % 4 === 0 });
         if (southSolid) props.push({ kind: "SIDE_PIPE_RUN", x: r.centerX, z: r.maxZ - 0.16, axis: "x", hasValve: false });
-        if (lx === 5 && lz === 1) {
+
+        if ((lx + lz) % 3 === 1) {
+          if (leftSolid) props.push({ kind: "RISER_PIPE_BUNDLE", x: r.minX + 0.20, z: r.centerZ + 0.72, rotY: Math.PI / 2 });
+          else if (northSolid) props.push({ kind: "RISER_PIPE_BUNDLE", x: r.centerX + 0.72, z: r.minZ + 0.20, rotY: 0 });
+        }
+
+        if (lx === 5 && lz === 1 && (!isColdZone || (cx === 0 && cz === 0))) {
           props.push({ kind: "STEAM_VENT", x: r.centerX, z: r.centerZ });
+        } else if (lx === 1 && lz === 5 && (isColdZone || (cx === 0 && cz === 0))) {
+          props.push({ kind: "COLD_VENT", x: r.centerX, z: r.centerZ });
         }
       }
     }
 
-    const dimPt = cellWorldRect(cx, cz, 1, 1);
-    lights.push({
-      x: dimPt.centerX,
-      y: levelData.environment.ceilingHeight - 0.1,
-      z: dimPt.centerZ,
-      rotY: 0,
-      flickerPhase: (Math.abs(cx * 3 + cz * 7) % 11) * 0.5,
+    // 2-3 sparse caged industrial bulkhead lamps per chunk (some with failing-bulb stutter)
+    const l2LampCells = [[1, 1], [5, 3], [1, 5]];
+    l2LampCells.forEach(([lx, lz], idx) => {
+      if (SOLID_CELL_TYPES.has(grid[lz][lx])) return;
+      if (idx === 2 && Math.abs(cx + cz) % 2 === 1) return;
+      const pt = cellWorldRect(cx, cz, lx, lz);
+      lights.push({
+        x: pt.centerX,
+        y: levelData.environment.ceilingHeight - 0.1,
+        z: pt.centerZ,
+        rotY: 0,
+        flickerPhase: (Math.abs(cx * 3 + cz * 7 + idx * 5) % 11) * 0.5,
+        stutter: Math.abs(cx + cz + idx) % 3 === 0,
+      });
     });
   }
 
@@ -1823,11 +2076,14 @@ export function generateChunkData(levelId, cx, cz, worldSeed = 1999, shiftEpoch 
     cz,
     worldSeed: seedNum,
     shiftEpoch: epoch,
+    l1FloorNumber: levelId === "level_1" ? l1Floor : null,
+    zoneTag,
     chunkHash,
     mazeMeta,
     grid,
     walls,
     propColliders,
+    subZones,
     lights,
     interactables,
     props,
@@ -1845,6 +2101,7 @@ export class ChunkManager {
     loadRadius = 2,
     unloadRadius = 3,
     enableNonEuclidean = false,
+    l1FloorNumber = 2,
     onChunkLoad = null,
     onChunkUnload = null,
     onChunkReload = null,
@@ -1854,6 +2111,7 @@ export class ChunkManager {
     this.loadRadius = loadRadius;
     this.unloadRadius = Math.max(unloadRadius, loadRadius);
     this.enableNonEuclidean = Boolean(enableNonEuclidean);
+    this.l1FloorNumber = Math.max(1, Math.min(2000, Math.trunc(Number(l1FloorNumber) || 2)));
     this.onChunkLoad = onChunkLoad;
     this.onChunkUnload = onChunkUnload;
     this.onChunkReload = onChunkReload;
@@ -1886,7 +2144,14 @@ export class ChunkManager {
             this.levelId === "level_0" && this.enableNonEuclidean
               ? (this.chunkShiftEpochs.get(key) || 0)
               : 0;
-          const chunkData = generateChunkData(this.levelId, cx, cz, this.worldSeed, epoch);
+          const chunkData = generateChunkData(
+            this.levelId,
+            cx,
+            cz,
+            this.worldSeed,
+            epoch,
+            this.levelId === "level_1" ? this.l1FloorNumber : null
+          );
           this.chunks.set(key, chunkData);
           loadedKeys.push(key);
           if (typeof this.onChunkLoad === "function") {
@@ -2121,7 +2386,7 @@ export class ChunkManager {
     return best;
   }
 
-  reset(newLevelId, newWorldSeed = this.worldSeed) {
+  reset(newLevelId, newWorldSeed = this.worldSeed, opts = {}) {
     const unloadedKeys = [];
     for (const [key, chunkData] of this.chunks.entries()) {
       unloadedKeys.push(key);
@@ -2135,6 +2400,9 @@ export class ChunkManager {
     this.nonEuclideanShiftCount = 0;
     this.levelId = newLevelId;
     this.worldSeed = Number(newWorldSeed) || 1999;
+    if (opts && opts.l1FloorNumber != null) {
+      this.l1FloorNumber = Math.max(1, Math.min(2000, Math.trunc(Number(opts.l1FloorNumber) || 2)));
+    }
     return unloadedKeys;
   }
 }

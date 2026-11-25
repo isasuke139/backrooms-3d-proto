@@ -20,6 +20,7 @@ export const TRIGGER_TYPES = Object.freeze({
   HUB_SEQUENCE: "HUB_SEQUENCE",
   HUB_DOOR: "HUB_DOOR",
   STAIRWELL: "STAIRWELL",
+  FLOOR_STAIRS: "FLOOR_STAIRS",
   OUTLET_NOCLIP: "OUTLET_NOCLIP",
   EXIT_DOOR: "EXIT_DOOR",
 });
@@ -80,6 +81,14 @@ export const TRANSITION_GRAPH = Object.freeze([
     trigger: TRIGGER_TYPES.STAIRWELL,
     label: "階段による階層移動（Level 0 / Level 2）",
     wikiCitation: "https://backrooms.fandom.com/wiki/Level_1#Exits",
+  },
+  {
+    id: "L1_FLOOR_CHANGE",
+    from: "level_1",
+    to: ["level_1"],
+    trigger: TRIGGER_TYPES.FLOOR_STAIRS,
+    label: "立体駐車場内の階段で別フロアへ昇降（1F〜2000F）",
+    wikiCitation: "https://backrooms.fandom.com/wiki/Level_1#Description",
   },
   {
     id: "L1_HUB_SEQ",
@@ -278,6 +287,21 @@ export function evaluateTransition({
 
   // LEVEL 1 rules
   if (currentLevelId === "level_1") {
+    if (triggerType === TRIGGER_TYPES.FLOOR_STAIRS) {
+      const curFloor = Math.max(1, Math.min(2000, Math.trunc(Number(context.currentFloor ?? 2) || 2)));
+      const delta = Math.trunc(Number(context.delta ?? 1) || 1);
+      const nextFloor = ((curFloor - 1 + delta + 200000) % 2000) + 1;
+      return {
+        allowed: true,
+        targetLevelId: "level_1",
+        ruleId: "L1_FLOOR_CHANGE",
+        targetFloor: nextFloor,
+        reason: `階段で Level 1 の ${nextFloor}F へ移動しました (1F〜2000F)`,
+        wikiCitation: "https://backrooms.fandom.com/wiki/Level_1#Description",
+        spawnPos: defaultSpawnFor("level_1"),
+        requiresKey: false,
+      };
+    }
     if (triggerType === TRIGGER_TYPES.HUB_SEQUENCE) {
       if (context.sequenceStep === "door_a_after_b" || context.sequenceCompleted === true) {
         return {

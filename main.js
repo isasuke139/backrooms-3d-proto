@@ -55,6 +55,7 @@ const ui = {
   wikiModalBody: document.getElementById("wiki-modal-body"),
   seedInput: document.getElementById("seed-input"),
   levelSelect: document.getElementById("level-select"),
+  entitiesToggle: document.getElementById("entities-toggle"),
   hud: document.getElementById("hud"),
   hudBadge: document.getElementById("hud-class-badge"),
   hudLevelName: document.getElementById("hud-level-name"),
@@ -364,6 +365,27 @@ function createHazardStripeTexture() {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(3, 1);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createCorrugatedTexture() {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 128;
+  const ctx = c.getContext("2d");
+  for (let x = 0; x < 128; x += 8) {
+    const g = ctx.createLinearGradient(x, 0, x + 8, 0);
+    g.addColorStop(0, "#7f878f");
+    g.addColorStop(0.5, "#cfd6dc");
+    g.addColorStop(1, "#6a727a");
+    ctx.fillStyle = g;
+    ctx.fillRect(x, 0, 8, 128);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(3, 2);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
@@ -814,10 +836,10 @@ class LevelMaterialCache {
 
       const hydrolitisPuddleMat = new THREE.MeshStandardMaterial({
         map: createPuddleFallbackTexture(false),
-        roughness: 0.06,
-        metalness: 0.06,
-        envMapIntensity: 2.2,
-        normalScale: new THREE.Vector2(0.28, 0.28),
+        roughness: 0.03,
+        metalness: 0.12,
+        envMapIntensity: 2.8,
+        normalScale: new THREE.Vector2(0.22, 0.22),
         transparent: true,
         depthWrite: false,
         polygonOffset: true,
@@ -826,9 +848,9 @@ class LevelMaterialCache {
       });
       const falsePuddleMat = new THREE.MeshStandardMaterial({
         map: createPuddleFallbackTexture(true),
-        roughness: 0.22,
-        metalness: 0.04,
-        envMapIntensity: 1.1,
+        roughness: 0.16,
+        metalness: 0.06,
+        envMapIntensity: 1.35,
         normalScale: new THREE.Vector2(0.2, 0.2),
         transparent: true,
         depthWrite: false,
@@ -896,13 +918,88 @@ class LevelMaterialCache {
 
       const hazardTex = createHazardStripeTexture();
       hazardTex.anisotropy = maxAniso;
+      const corrugatedTex = createCorrugatedTexture();
+      corrugatedTex.anisotropy = maxAniso;
       const glowOrange = createGlowSpriteTexture("#ff9c47");
+      const glowCool = createGlowSpriteTexture("#dceeff");
+      const glowCold = createGlowSpriteTexture("#e6f5ea");
+
+      const maintWhiteWallMat = new THREE.MeshStandardMaterial({
+        map: makeFallbackTex("level1_concrete", 812, [1, 1]),
+        color: 0xf1f4f7,
+        roughness: 0.82,
+        metalness: 0.03,
+        normalScale: new THREE.Vector2(0.75, 0.75),
+      });
+      loadSharedPbr(
+        maintWhiteWallMat,
+        "./assets/textures/tex_l1_concrete_wall.jpg",
+        "./assets/textures/tex_l1_concrete_wall_nrm.jpg",
+        "./assets/textures/tex_l1_concrete_wall_rgh.jpg",
+        { repeat: [1, 1], slotName: "maint_white_wall" }
+      );
+
+      const steamSpriteMat = new THREE.SpriteMaterial({
+        map: glowCold,
+        color: 0xeaf2ee,
+        transparent: true,
+        opacity: 0.2,
+        depthWrite: false,
+      });
+      steamSpriteMat.userData = { sharedMat: true };
+
+      const keyGlintMat = new THREE.SpriteMaterial({
+        map: glowCool,
+        color: 0xfff6d2,
+        transparent: true,
+        opacity: 0.16,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      keyGlintMat.userData = { sharedMat: true };
 
       this.shared = {
         hubConcreteMat,
         hubRoadMat,
         sidewalkMat,
         l2WoodMat,
+        maintWhiteWallMat,
+        corrugatedWallMat: new THREE.MeshStandardMaterial({
+          map: corrugatedTex,
+          color: 0xc2c8ce,
+          roughness: 0.48,
+          metalness: 0.48,
+          envMapIntensity: 0.85,
+        }),
+        warehouseSteelMat: new THREE.MeshStandardMaterial({ color: 0x3a4046, roughness: 0.56, metalness: 0.65 }),
+        truckWhiteMat: new THREE.MeshStandardMaterial({ color: 0xdee2e6, roughness: 0.42, metalness: 0.25, envMapIntensity: 0.95 }),
+        almondWaterMat: new THREE.MeshStandardMaterial({
+          color: 0xd8cba8,
+          roughness: 0.12,
+          metalness: 0.08,
+          transparent: true,
+          opacity: 0.84,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2,
+        }),
+        frostMat: new THREE.MeshStandardMaterial({
+          color: 0xd6ecff,
+          roughness: 0.72,
+          metalness: 0.04,
+          transparent: true,
+          opacity: 0.68,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          polygonOffsetUnits: -1,
+        }),
+        brickFragmentMat: new THREE.MeshStandardMaterial({ color: 0x6b4537, roughness: 0.9, metalness: 0.03 }),
+        warehouseLightMat: new THREE.MeshBasicMaterial({ color: 0xffe4b8 }),
+        maintLightMat: new THREE.MeshBasicMaterial({ color: 0xf6fbff }),
+        stairsSignMat: new THREE.MeshBasicMaterial({ map: createSignTexture("TEXT", "STAIRS", "#1d2226", "#e6edf2") }),
+        upFloorSignMat: new THREE.MeshBasicMaterial({ map: createSignTexture("TEXT", "UP FLOOR", "#1d2226", "#ffcf66") }),
+        steamSpriteMat,
+        keyGlintMat,
         rustPipeMat,
         darkPipeMat,
         hubPipeMat,
@@ -985,8 +1082,8 @@ class LevelMaterialCache {
         glowTextures: {
           warm: createGlowSpriteTexture("#fff0ad"),
           orange: glowOrange,
-          cool: createGlowSpriteTexture("#dceeff"),
-          cold: createGlowSpriteTexture("#e6f5ea"),
+          cool: glowCool,
+          cold: glowCold,
           amber: createGlowSpriteTexture("#ffbe55"),
         },
         tintMatCache: new Map(),
@@ -1101,24 +1198,44 @@ function getLevelEnvironmentTexture(levelId) {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envScene = new THREE.Scene();
   envScene.background = new THREE.Color(pal.bg);
-  const topPanel = new THREE.Mesh(
-    new THREE.PlaneGeometry(18, 18),
-    new THREE.MeshBasicMaterial({ color: pal.top, side: THREE.DoubleSide })
-  );
-  topPanel.position.set(0, 6, 0);
-  topPanel.rotation.x = Math.PI / 2;
-  const sidePanel = new THREE.Mesh(
-    new THREE.PlaneGeometry(18, 8),
-    new THREE.MeshBasicMaterial({ color: pal.side, side: THREE.DoubleSide })
-  );
-  sidePanel.position.set(0, 0, -8);
-  envScene.add(topPanel, sidePanel);
+  const disposables = [];
+
+  if (levelId === "level_1") {
+    // Three linear cool-white fluorescent strip panels so damp concrete & puddles reflect streaks (File:Level_1.jpg)
+    const stripGeo = new THREE.PlaneGeometry(16, 1.15);
+    const stripMat = new THREE.MeshBasicMaterial({ color: 0xf4faff, side: THREE.DoubleSide });
+    disposables.push(stripGeo, stripMat);
+    for (const sz of [-4.2, 0, 4.2]) {
+      const strip = new THREE.Mesh(stripGeo, stripMat);
+      strip.position.set(0, 5.8, sz);
+      strip.rotation.x = Math.PI / 2;
+      envScene.add(strip);
+    }
+    const wallGeo = new THREE.PlaneGeometry(18, 8);
+    const wallMat = new THREE.MeshBasicMaterial({ color: 0x464b50, side: THREE.DoubleSide });
+    disposables.push(wallGeo, wallMat);
+    for (const wz of [-8, 8]) {
+      const wMesh = new THREE.Mesh(wallGeo, wallMat);
+      wMesh.position.set(0, 0, wz);
+      envScene.add(wMesh);
+    }
+  } else {
+    const topGeo = new THREE.PlaneGeometry(18, 18);
+    const topMat = new THREE.MeshBasicMaterial({ color: pal.top, side: THREE.DoubleSide });
+    const topPanel = new THREE.Mesh(topGeo, topMat);
+    topPanel.position.set(0, 6, 0);
+    topPanel.rotation.x = Math.PI / 2;
+    const sideGeo = new THREE.PlaneGeometry(18, 8);
+    const sideMat = new THREE.MeshBasicMaterial({ color: pal.side, side: THREE.DoubleSide });
+    const sidePanel = new THREE.Mesh(sideGeo, sideMat);
+    sidePanel.position.set(0, 0, -8);
+    envScene.add(topPanel, sidePanel);
+    disposables.push(topGeo, topMat, sideGeo, sideMat);
+  }
+
   const envRT = pmrem.fromScene(envScene, 0.04);
   levelEnvTargets.set(levelId, envRT);
-  topPanel.geometry.dispose();
-  topPanel.material.dispose();
-  sidePanel.geometry.dispose();
-  sidePanel.material.dispose();
+  for (const d of disposables) d.dispose();
   pmrem.dispose();
   return envRT.texture;
 }
@@ -1162,7 +1279,8 @@ const pointLightPool = Array.from({ length: POINT_LIGHT_POOL_SIZE }, () => {
   return pt;
 });
 
-// Distant Smiler eyes (visible only during Level 1 blackout when flashlight is off)
+// Distant Smiler eyes & grin (active ONLY when entitiesEnabled === true)
+const smilerGlowTex = createGlowSpriteTexture("#ffffff");
 const smilerGroup = new THREE.Group();
 const smilerEyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 const smilerLeftEye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), smilerEyeMat);
@@ -1175,8 +1293,49 @@ for (let i = -3; i <= 3; i += 1) {
   tooth.position.set(i * 0.065, -0.06 + Math.abs(i) * 0.014, 0);
   smilerGroup.add(tooth);
 }
+const smilerHalo = new THREE.Sprite(
+  new THREE.SpriteMaterial({
+    map: smilerGlowTex,
+    color: 0xddeeff,
+    transparent: true,
+    opacity: 0.24,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  })
+);
+smilerHalo.position.set(0, 0.03, -0.04);
+smilerHalo.scale.set(1.4, 1.1, 1);
+smilerGroup.add(smilerHalo);
 smilerGroup.visible = false;
 scene.add(smilerGroup);
+
+// Level 2 distant corridor Smiler stalker (active ONLY when entitiesEnabled === true)
+const l2SmilerGroup = new THREE.Group();
+const l2LeftEye = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 8), smilerEyeMat);
+const l2RightEye = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 8), smilerEyeMat);
+l2LeftEye.position.set(-0.11, 0.09, 0);
+l2RightEye.position.set(0.11, 0.09, 0);
+l2SmilerGroup.add(l2LeftEye, l2RightEye);
+for (let i = -2; i <= 2; i += 1) {
+  const tooth = new THREE.Mesh(new THREE.SphereGeometry(0.024, 6, 6), smilerEyeMat);
+  tooth.position.set(i * 0.055, -0.05 + Math.abs(i) * 0.012, 0);
+  l2SmilerGroup.add(tooth);
+}
+const l2Halo = new THREE.Sprite(
+  new THREE.SpriteMaterial({
+    map: smilerGlowTex,
+    color: 0xcce4d4,
+    transparent: true,
+    opacity: 0.16,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  })
+);
+l2Halo.position.set(0, 0.02, -0.04);
+l2Halo.scale.set(1.0, 0.85, 1);
+l2SmilerGroup.add(l2Halo);
+l2SmilerGroup.visible = false;
+scene.add(l2SmilerGroup);
 
 // ---------------------------------------------------------------------------
 // Game State
@@ -1184,12 +1343,17 @@ scene.add(smilerGroup);
 const audio = new BackroomsAudio();
 const chunkMeshes = new Map();
 let keyPickupMeshes = [];
+let keyGlintSprites = [];
 let ventFanRotors = [];
+let steamPlumes = [];
+let sparkMeshes = [];
 
 const state = {
   started: false,
   pointerLocked: false,
+  entitiesEnabled: false,
   currentLevelId: "level_0",
+  l1FloorNumber: 2,
   worldSeedStr: "1999",
   worldSeed: hashStringToSeed("1999"),
   player: {
@@ -1216,6 +1380,12 @@ const state = {
   hubSequenceStep: "none",
   blackoutActive: false,
   blackoutTimer: 0,
+  smilerCooldown: 0,
+  rebarCooldown: 0,
+  thermalLogCooldown: 0,
+  dripTimer: 0,
+  l2ClankTimer: 0,
+  currentSubZone: null,
   manilaDwellSec: 0,
   manilaWarnStep: 0,
   tvChannelIdx: 0,
@@ -1272,12 +1442,40 @@ function disposeChunkGroup(group) {
       obj.geometry.dispose();
       if (obj.material) obj.material.dispose();
     }
-    if (obj.userData && obj.userData.isVentRotor) {
+    if (obj.userData?.isVentRotor) {
       const rIdx = ventFanRotors.indexOf(obj);
       if (rIdx !== -1) ventFanRotors.splice(rIdx, 1);
     }
+    if (obj.userData?.isKeyPickup) {
+      const kIdx = keyPickupMeshes.indexOf(obj);
+      if (kIdx !== -1) keyPickupMeshes.splice(kIdx, 1);
+    }
+    if (obj.userData?.isKeyGlint) {
+      const gIdx = keyGlintSprites.indexOf(obj);
+      if (gIdx !== -1) keyGlintSprites.splice(gIdx, 1);
+    }
+    if (obj.userData?.isSteamPlume) {
+      const sIdx = steamPlumes.findIndex((p) => p.sprite === obj);
+      if (sIdx !== -1) steamPlumes.splice(sIdx, 1);
+    }
+    if (obj.userData?.isSparkMesh) {
+      const spIdx = sparkMeshes.indexOf(obj);
+      if (spIdx !== -1) sparkMeshes.splice(spIdx, 1);
+    }
   });
   scene.remove(group);
+}
+
+function getPlayerSubZone(x, z) {
+  const { cx, cz } = chunkManager.worldToChunk(x, z);
+  const chunk = chunkManager.chunks.get(`${state.currentLevelId}:${cx}:${cz}`);
+  if (!chunk || !Array.isArray(chunk.subZones)) return null;
+  for (const sz of chunk.subZones) {
+    if (x >= sz.minX && x <= sz.maxX && z >= sz.minZ && z <= sz.maxZ) {
+      return sz;
+    }
+  }
+  return null;
 }
 
 function updateChunkVisibility() {
@@ -1389,11 +1587,34 @@ function buildChunkGroup(chunkData) {
   group.add(floorMesh);
 
   if (!hasHubArch) {
-    const ceilMesh = new THREE.Mesh(SHARED_GEOS.plane, mats.ceiling);
-    ceilMesh.scale.set(CHUNK_WORLD_SIZE, CHUNK_WORLD_SIZE, 1);
-    ceilMesh.rotation.x = Math.PI / 2;
-    ceilMesh.position.set(centerX, h, centerZ);
-    group.add(ceilMesh);
+    const wz = chunkData.subZones?.find((z) => z.kind === "warehouse");
+    if (wz) {
+      const cMinX = originX;
+      const cMaxX = originX + CHUNK_WORLD_SIZE;
+      const cMinZ = originZ;
+      const cMaxZ = originZ + CHUNK_WORLD_SIZE;
+      const strips = [
+        [cMinX, cMaxX, cMinZ, wz.minZ],
+        [cMinX, cMaxX, wz.maxZ, cMaxZ],
+        [cMinX, wz.minX, wz.minZ, wz.maxZ],
+        [wz.maxX, cMaxX, wz.minZ, wz.maxZ],
+      ];
+      for (const [x0, x1, z0, z1] of strips) {
+        const sw = x1 - x0;
+        const sd = z1 - z0;
+        if (sw <= 0.05 || sd <= 0.05) continue;
+        const cStrip = new THREE.Mesh(getSharedWorldPlaneGeo(sw, sd, 3.0), mats.ceiling);
+        cStrip.rotation.x = Math.PI / 2;
+        cStrip.position.set((x0 + x1) * 0.5, h, (z0 + z1) * 0.5);
+        group.add(cStrip);
+      }
+    } else {
+      const ceilMesh = new THREE.Mesh(SHARED_GEOS.plane, mats.ceiling);
+      ceilMesh.scale.set(CHUNK_WORLD_SIZE, CHUNK_WORLD_SIZE, 1);
+      ceilMesh.rotation.x = Math.PI / 2;
+      ceilMesh.position.set(centerX, h, centerZ);
+      group.add(ceilMesh);
+    }
   }
 
   // Walls, Sculpted Arched Colonnades, Parking Pillars, High-Poly Sedans
@@ -1481,6 +1702,8 @@ function buildChunkGroup(chunkData) {
     }
 
     if (w.wallStyle === "parking_pillar" || w.wallStyle === "parking_pillar_round") {
+      const hasSafetyTrim = Math.abs(w.lx * 7 + w.lz * 13) % 4 === 0;
+      const hasExtinguisher = Math.abs(w.lx * 5 + w.lz * 9) % 4 === 1;
       if (w.wallStyle === "parking_pillar_round") {
         const rad = Math.min(width, depth) * 0.5;
         const col = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, w.height, 18), mats.wall);
@@ -1503,19 +1726,21 @@ function buildChunkGroup(chunkData) {
         capUpper.position.set(cx, w.height - 0.14, cz);
         group.add(capUpper);
 
-        const band = new THREE.Mesh(
-          new THREE.CylinderGeometry(rad + 0.015, rad + 0.015, 0.42, 18),
-          s.pillarBandMat
-        );
-        band.position.set(cx, w.height - 0.72, cz);
-        group.add(band);
+        if (hasSafetyTrim) {
+          const band = new THREE.Mesh(
+            new THREE.CylinderGeometry(rad + 0.015, rad + 0.015, 0.42, 18),
+            s.pillarBandMat
+          );
+          band.position.set(cx, w.height - 0.72, cz);
+          group.add(band);
 
-        const hazard = new THREE.Mesh(
-          new THREE.CylinderGeometry(rad + 0.02, rad + 0.02, 0.88, 18),
-          s.hazardStripeMat
-        );
-        hazard.position.set(cx, 0.44, cz);
-        group.add(hazard);
+          const hazard = new THREE.Mesh(
+            new THREE.CylinderGeometry(rad + 0.02, rad + 0.02, 0.88, 18),
+            s.hazardStripeMat
+          );
+          hazard.position.set(cx, 0.44, cz);
+          group.add(hazard);
+        }
       } else {
         const col = new THREE.Mesh(createWorldScaledBoxGeometry(width, w.height, depth, 3.0), mats.wall);
         col.position.set(cx, w.height * 0.5, cz);
@@ -1532,13 +1757,15 @@ function buildChunkGroup(chunkData) {
         capUpper.position.set(cx, w.height - 0.14, cz);
         group.add(capUpper);
 
-        const band = new THREE.Mesh(new THREE.BoxGeometry(width + 0.03, 0.42, depth + 0.03), s.pillarBandMat);
-        band.position.set(cx, w.height - 0.72, cz);
-        group.add(band);
+        if (hasSafetyTrim) {
+          const band = new THREE.Mesh(new THREE.BoxGeometry(width + 0.03, 0.42, depth + 0.03), s.pillarBandMat);
+          band.position.set(cx, w.height - 0.72, cz);
+          group.add(band);
 
-        const hazard = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, 0.88, depth + 0.04), s.hazardStripeMat);
-        hazard.position.set(cx, 0.44, cz);
-        group.add(hazard);
+          const hazard = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, 0.88, depth + 0.04), s.hazardStripeMat);
+          hazard.position.set(cx, 0.44, cz);
+          group.add(hazard);
+        }
       }
 
       const stencil = new THREE.Mesh(
@@ -1568,8 +1795,8 @@ function buildChunkGroup(chunkData) {
         stripHalo.position.set(cx, 2.8, w.minZ - 0.2);
         stripHalo.scale.set(1.6, 2.6, 1);
         group.add(stripHalo);
-      } else {
-        // 3D Fire extinguisher mounted on pillar (File:SolusLevel1.jpg)
+      } else if (hasExtinguisher) {
+        // Sparse 3D Fire extinguisher mounted on pillar (File:SolusLevel1.jpg)
         const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.56, 14), s.extinguisherRedMat);
         tank.position.set(w.maxX + 0.12, 1.25, cz);
         tank.castShadow = true;
@@ -1863,29 +2090,272 @@ function buildChunkGroup(chunkData) {
       topBar.castShadow = true;
       group.add(base, topBar);
     } else if (prop.kind === "PARKING_RAMP") {
-      const ramp = new THREE.Mesh(createWorldScaledBoxGeometry(4.2, 0.28, 7.6, 3.0), mats.wall);
-      ramp.position.set(prop.x, 1.35, prop.z);
+      const rampGrp = new THREE.Group();
+      rampGrp.position.set(prop.x, 0, prop.z);
+      const ramp = new THREE.Mesh(getSharedBoxGeo(4.2, 0.28, 7.6, 3.0), mats.wall);
+      ramp.position.set(0, 1.35, 0);
       ramp.rotation.x = -0.32;
       ramp.receiveShadow = true;
-      group.add(ramp);
-      const rail = new THREE.Mesh(createWorldScaledBoxGeometry(0.24, 0.78, 7.6, 3.0), mats.wall);
-      rail.position.set(prop.x + 2.0, 1.85, prop.z);
-      rail.rotation.x = -0.32;
-      group.add(rail);
+      rampGrp.add(ramp);
+      for (const sideX of [-2.0, 2.0]) {
+        const curb = new THREE.Mesh(getSharedBoxGeo(0.24, 0.68, 7.6, 3.0), mats.wall);
+        curb.position.set(sideX, 1.78, 0);
+        curb.rotation.x = -0.32;
+        rampGrp.add(curb);
+      }
+      // Solid concrete underside support beneath upper slope
+      const supportWall = new THREE.Mesh(getSharedBoxGeo(4.0, 2.1, 2.8, 3.0), mats.wall);
+      supportWall.position.set(0, 1.05, -2.2);
+      supportWall.castShadow = true;
+      supportWall.receiveShadow = true;
+      rampGrp.add(supportWall);
+      for (let rz = -3.0; rz <= 3.0; rz += 0.75) {
+        const rib = new THREE.Mesh(getSharedBoxGeo(3.6, 0.04, 0.08, 1.0), s.gantryMat);
+        rib.position.set(0, 1.50 - rz * Math.sin(-0.32), rz);
+        rib.rotation.x = -0.32;
+        rampGrp.add(rib);
+      }
+      group.add(rampGrp);
     } else if (prop.kind === "OVERHEAD_BEAM") {
-      batch.add(getSharedBoxGeo(CHUNK_WORLD_SIZE, 0.48, 0.42, 3.0), mats.ceiling, {
+      const bw = prop.width || CHUNK_WORLD_SIZE;
+      batch.add(getSharedBoxGeo(bw, 0.48, 0.42, 3.0), mats.ceiling, {
         x: prop.x,
         y: h - 0.24,
         z: prop.z,
       });
     } else if (prop.kind === "CEILING_PIPE") {
+      const bw = prop.width || CHUNK_WORLD_SIZE;
       const pMat = prop.color === 0x9aa2ab ? s.l1GreyPipeMat : s.l1OrangePipeMat;
-      batch.add(getSharedPipeGeometry(0.11, CHUNK_WORLD_SIZE, 10), pMat, {
+      batch.add(getSharedPipeGeometry(0.11, bw, 10), pMat, {
         x: prop.x,
         y: h - 0.52,
         z: prop.z,
         rz: Math.PI / 2,
       });
+    } else if (prop.kind === "SPRINKLER_PIPE") {
+      const len = prop.length || CHUNK_WORLD_SIZE;
+      batch.add(getSharedPipeGeometry(0.045, len, 8), s.l1GreyPipeMat, {
+        x: prop.x,
+        y: h - 0.18,
+        z: prop.z,
+        rz: Math.PI / 2,
+      });
+      for (let ox = -len * 0.5 + 2.0; ox <= len * 0.5 - 2.0; ox += 4.0) {
+        batch.add(SHARED_GEOS.box, s.extinguisherRedMat, {
+          x: prop.x + ox,
+          y: h - 0.24,
+          z: prop.z,
+          sx: 0.06,
+          sy: 0.09,
+          sz: 0.06,
+        });
+      }
+    } else if (prop.kind === "CORRUGATED_WALL") {
+      batch.add(getSharedBoxGeo(prop.w || 2.85, 3.2, 0.08, 2.0), s.corrugatedWallMat, {
+        x: prop.x,
+        y: 1.6,
+        z: prop.z,
+        ry: prop.rotY || 0,
+        receiveShadow: true,
+      });
+    } else if (prop.kind === "SUBZONE_WALL") {
+      const wMat = prop.style === "maint_white" ? s.maintWhiteWallMat : mats.wall;
+      batch.add(getSharedBoxGeo(prop.w, prop.height || h, prop.d, 3.0), wMat, {
+        x: prop.x,
+        y: (prop.height || h) * 0.5,
+        z: prop.z,
+        receiveShadow: true,
+        castShadow: true,
+      });
+    } else if (prop.kind === "WAREHOUSE_ENTRY_DOOR" || prop.kind === "MAINT_ENTRY_DOOR") {
+      const isMaint = prop.kind === "MAINT_ENTRY_DOOR";
+      const dGrp = new THREE.Group();
+      dGrp.position.set(prop.x, 0, prop.z);
+      const frameColor = isMaint ? s.gantryMat : s.warehouseSteelMat;
+      for (const sx of [-1.24, 1.24]) {
+        const jamb = new THREE.Mesh(getSharedBoxGeo(0.14, 2.7, 0.36, 2.0), frameColor);
+        jamb.position.set(sx, 1.35, 0);
+        dGrp.add(jamb);
+      }
+      const header = new THREE.Mesh(getSharedBoxGeo(2.62, 0.24, 0.38, 2.0), frameColor);
+      header.position.set(0, 2.75, 0);
+      const transom = new THREE.Mesh(
+        getSharedBoxGeo(2.62, Math.max(0.2, h - 2.86), 0.30, 3.0),
+        isMaint ? s.maintWhiteWallMat : mats.wall
+      );
+      transom.position.set(0, (2.86 + h) * 0.5, 0);
+      dGrp.add(header, transom);
+
+      // Propped open ajar door leaf swung into doorway edge (walkable opening!)
+      const leafPivot = new THREE.Group();
+      leafPivot.position.set(-1.14, 0, isMaint ? -0.04 : 0.04);
+      leafPivot.rotation.y = isMaint ? -1.22 : 1.18;
+      const leafMat = isMaint
+        ? s.maintBlackDoorMat
+        : prop.doorVariant === "pink"
+          ? s.warehousePinkDoorMat
+          : prop.doorVariant === "white"
+            ? s.warehouseWhiteDoorMat
+            : s.warehouseWoodDoorMat;
+      const leaf = new THREE.Mesh(getSharedBoxGeo(1.18, 2.55, 0.07, 2.5), leafMat);
+      leaf.position.set(0.59, 1.28, 0);
+      leaf.castShadow = true;
+      const handle = new THREE.Mesh(getSharedBoxGeo(0.14, 0.04, 0.14, 1.0), s.brassMat);
+      handle.position.set(1.02, 1.05, 0);
+      leafPivot.add(leaf, handle);
+      dGrp.add(leafPivot);
+      group.add(dGrp);
+    } else if (prop.kind === "WAREHOUSE_VAULT") {
+      const vH = prop.topHeight - prop.baseHeight;
+      const vMidY = (prop.baseHeight + prop.topHeight) * 0.5;
+      const vw = prop.maxX - prop.minX;
+      const vd = prop.maxZ - prop.minZ;
+      const vCx = (prop.minX + prop.maxX) * 0.5;
+      const vCz = (prop.minZ + prop.maxZ) * 0.5;
+      for (const [wx, wz, ww, wd] of [
+        [vCx, prop.minZ, vw, 0.30],
+        [vCx, prop.maxZ, vw, 0.30],
+        [prop.minX, vCz, 0.30, vd],
+        [prop.maxX, vCz, 0.30, vd],
+      ]) {
+        batch.add(getSharedBoxGeo(ww, vH, wd, 3.0), mats.wall, {
+          x: wx,
+          y: vMidY,
+          z: wz,
+          receiveShadow: true,
+        });
+      }
+      const upperRoof = new THREE.Mesh(getSharedWorldPlaneGeo(vw, vd, 3.0), mats.ceiling);
+      upperRoof.rotation.x = Math.PI / 2;
+      upperRoof.position.set(vCx, prop.topHeight, vCz);
+      group.add(upperRoof);
+      for (const tz of [prop.minZ + vd * 0.33, prop.minZ + vd * 0.67]) {
+        batch.add(getSharedBoxGeo(vw - 0.3, 0.36, 0.24, 2.0), s.warehouseSteelMat, {
+          x: vCx,
+          y: prop.topHeight - 0.22,
+          z: tz,
+        });
+      }
+    } else if (prop.kind === "WAREHOUSE_SHUTTER") {
+      const shGrp = new THREE.Group();
+      shGrp.position.set(prop.x, 0, prop.z);
+      shGrp.rotation.y = prop.rotY || 0;
+      const shutter = new THREE.Mesh(getSharedBoxGeo(prop.w || 3.4, 3.4, 0.12, 2.0), s.corrugatedWallMat);
+      shutter.position.set(0, 1.7, 0);
+      const hood = new THREE.Mesh(getSharedBoxGeo((prop.w || 3.4) + 0.25, 0.38, 0.36, 2.0), s.warehouseSteelMat);
+      hood.position.set(0, 3.55, 0.08);
+      shGrp.add(shutter, hood);
+      group.add(shGrp);
+    } else if (prop.kind === "WAREHOUSE_RACK") {
+      const rw = prop.w || 1.1;
+      const rd = prop.d || 2.5;
+      for (const px of [-rw * 0.45, rw * 0.45]) {
+        for (const pz of [-rd * 0.46, rd * 0.46]) {
+          batch.add(SHARED_GEOS.box, s.warehouseSteelMat, {
+            x: prop.x + px,
+            y: 1.55,
+            z: prop.z + pz,
+            sx: 0.08,
+            sy: 3.1,
+            sz: 0.08,
+          });
+        }
+      }
+      for (const sy of [0.35, 1.45, 2.55]) {
+        batch.add(getSharedBoxGeo(rw, 0.07, rd, 1.5), s.warehouseSteelMat, {
+          x: prop.x,
+          y: sy,
+          z: prop.z,
+          castShadow: true,
+          receiveShadow: true,
+        });
+      }
+    } else if (prop.kind === "WHITE_TRUCK") {
+      const tGrp = new THREE.Group();
+      tGrp.position.set(prop.x, 0, prop.z);
+      const cargo = new THREE.Mesh(getSharedBoxGeo(2.25, 2.25, 3.8, 2.5), s.truckWhiteMat);
+      cargo.position.set(0, 1.78, 0.65);
+      cargo.castShadow = true;
+      cargo.receiveShadow = true;
+      const cab = new THREE.Mesh(getSharedBoxGeo(2.1, 1.48, 1.55, 2.0), s.truckWhiteMat);
+      cab.position.set(0, 1.24, -1.95);
+      cab.castShadow = true;
+      const glass = new THREE.Mesh(SHARED_GEOS.box, s.windshieldMat);
+      glass.scale.set(1.86, 0.62, 0.10);
+      glass.position.set(0, 1.54, -2.72);
+      const chassis = new THREE.Mesh(SHARED_GEOS.box, s.gantryMat);
+      chassis.scale.set(1.9, 0.34, 5.1);
+      chassis.position.set(0, 0.56, -0.15);
+      tGrp.add(cargo, cab, glass, chassis);
+      for (const [wx, wz] of [[-0.98, -2.0], [0.98, -2.0], [-1.02, 1.4], [1.02, 1.4]]) {
+        const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.28, 16), s.tireMat);
+        tire.rotation.z = Math.PI / 2;
+        tire.position.set(wx, 0.42, wz);
+        tire.castShadow = true;
+        const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.3, 12), s.rimMat);
+        rim.rotation.z = Math.PI / 2;
+        rim.position.set(wx, 0.42, wz);
+        tGrp.add(tire, rim);
+      }
+      for (const lx of [-0.72, 0.72]) {
+        const head = new THREE.Mesh(SHARED_GEOS.box, s.headlightMat);
+        head.scale.set(0.28, 0.16, 0.08);
+        head.position.set(lx, 0.78, -2.73);
+        const tail = new THREE.Mesh(SHARED_GEOS.box, s.taillightMat);
+        tail.scale.set(0.26, 0.14, 0.08);
+        tail.position.set(lx, 0.78, 2.55);
+        tGrp.add(head, tail);
+      }
+      group.add(tGrp);
+    } else if (prop.kind === "MAINT_BREAKER") {
+      const bGrp = new THREE.Group();
+      bGrp.position.set(prop.x, 0, prop.z);
+      bGrp.rotation.y = prop.rotY || 0;
+      const box = new THREE.Mesh(getSharedBoxGeo(0.95, 1.35, 0.26, 1.5), s.warehouseSteelMat);
+      box.position.set(0, 1.52, 0.12);
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.22), s.warnSignMat);
+      sign.position.set(0, 1.65, 0.26);
+      bGrp.add(box, sign);
+      for (const cxOff of [-0.22, 0.22]) {
+        const conduit = new THREE.Mesh(getSharedPipeGeometry(0.032, h - 2.1, 8), s.l1GreyPipeMat);
+        conduit.position.set(cxOff, 2.15 + (h - 2.1) * 0.5, 0.12);
+        bGrp.add(conduit);
+      }
+      group.add(bGrp);
+    } else if (prop.kind === "MAINT_ALMOND_PIPE") {
+      const pGrp = new THREE.Group();
+      pGrp.position.set(prop.x, 0, prop.z);
+      pGrp.rotation.y = prop.rotY || 0;
+      const vPipe = new THREE.Mesh(getSharedPipeGeometry(0.065, h - 0.6, 10), s.l1GreyPipeMat);
+      vPipe.position.set(0, (h - 0.6) * 0.5 + 0.3, 0.12);
+      const leak = new THREE.Mesh(new THREE.CircleGeometry(0.52, 16), s.almondWaterMat);
+      leak.rotation.x = -Math.PI / 2;
+      leak.position.set(0, 0.012, 0.36);
+      pGrp.add(vPipe, leak);
+      group.add(pGrp);
+    } else if (prop.kind === "MAINT_CLUTTER") {
+      const mGrp = new THREE.Group();
+      mGrp.position.set(prop.x, 0, prop.z);
+      const top = new THREE.Mesh(getSharedBoxGeo(1.75, 0.09, 0.95, 1.5), s.woodMat);
+      top.position.set(0, 0.82, 0);
+      top.castShadow = true;
+      top.receiveShadow = true;
+      mGrp.add(top);
+      for (const [lx, lz] of [[-0.78, -0.38], [0.78, -0.38], [-0.78, 0.38], [0.78, 0.38]]) {
+        const leg = new THREE.Mesh(SHARED_GEOS.box, s.warehouseSteelMat);
+        leg.scale.set(0.08, 0.80, 0.08);
+        leg.position.set(lx, 0.40, lz);
+        mGrp.add(leg);
+      }
+      const toolbox = new THREE.Mesh(SHARED_GEOS.box, s.extinguisherRedMat);
+      toolbox.scale.set(0.48, 0.24, 0.26);
+      toolbox.position.set(-0.32, 0.98, 0.05);
+      const plywood = new THREE.Mesh(getSharedBoxGeo(1.2, 1.5, 0.05, 1.5), s.woodMat);
+      plywood.position.set(0.95, 0.72, -0.32);
+      plywood.rotation.z = 0.16;
+      plywood.rotation.y = 0.22;
+      mGrp.add(toolbox, plywood);
+      group.add(mGrp);
     } else if (prop.kind === "FAKE_EXIT_SIGN") {
       const signGrp = new THREE.Group();
       signGrp.position.set(prop.x, 3.1, prop.z);
@@ -2113,26 +2583,169 @@ function buildChunkGroup(chunkData) {
           ry: isX ? 0 : Math.PI / 2,
         });
       }
+    } else if (prop.kind === "BRICK_FRAGMENT") {
+      const cosR = Math.cos(prop.rotY || 0);
+      const sinR = Math.sin(prop.rotY || 0);
+      for (const [bx, by, sx, sy] of [[-0.55, 0.42, 0.28, 0.78], [0.0, 1.25, 0.22, 1.15], [0.58, 2.05, 0.26, 0.92]]) {
+        batch.add(SHARED_GEOS.box, s.brickFragmentMat, {
+          x: prop.x + bx * cosR,
+          y: by,
+          z: prop.z - bx * sinR,
+          ry: prop.rotY || 0,
+          sx,
+          sy,
+          sz: 0.14,
+          receiveShadow: true,
+        });
+      }
+    } else if (prop.kind === "RISER_PIPE_BUNDLE") {
+      const cosR = Math.cos(prop.rotY || 0);
+      const sinR = Math.sin(prop.rotY || 0);
+      batch.add(getSharedPipeGeometry(0.065, h - 0.15, 10), s.darkPipeMat, {
+        x: prop.x - 0.08 * cosR,
+        y: (h - 0.15) * 0.5,
+        z: prop.z + 0.08 * sinR,
+      });
+      batch.add(getSharedPipeGeometry(0.05, h - 0.15, 10), s.rustPipeMat, {
+        x: prop.x + 0.08 * cosR,
+        y: (h - 0.15) * 0.5,
+        z: prop.z - 0.08 * sinR,
+      });
+      batch.add(SHARED_GEOS.cyl10, s.brassMat, {
+        x: prop.x - 0.08 * cosR + 0.06 * sinR,
+        y: 1.48,
+        z: prop.z + 0.08 * sinR + 0.06 * cosR,
+        rx: Math.PI / 2,
+        ry: prop.rotY || 0,
+        sx: 0.075,
+        sy: 0.05,
+        sz: 0.075,
+      });
+    } else if (prop.kind === "FLOOR_GRATE") {
+      batch.add(SHARED_GEOS.box, s.gantryMat, {
+        x: prop.x,
+        y: 0.008,
+        z: prop.z,
+        sx: 0.94,
+        sy: 0.016,
+        sz: 0.94,
+      });
+      batch.add(SHARED_GEOS.box, s.alcoveVoidMat, {
+        x: prop.x,
+        y: 0.011,
+        z: prop.z,
+        sx: 0.80,
+        sy: 0.014,
+        sz: 0.80,
+      });
+      for (let bar = -0.3; bar <= 0.31; bar += 0.15) {
+        batch.add(SHARED_GEOS.box, s.warehouseSteelMat, {
+          x: prop.x,
+          y: 0.016,
+          z: prop.z + bar,
+          sx: 0.80,
+          sy: 0.018,
+          sz: 0.04,
+        });
+      }
+    } else if (prop.kind === "CONDUIT_CABLE") {
+      const len = prop.length || CHUNK_WORLD_SIZE;
+      const isX = prop.axis === "x";
+      for (const off of [-0.07, 0.07]) {
+        batch.add(getSharedPipeGeometry(0.02, len, 6), s.crawlWireMat, {
+          x: prop.x + (isX ? 0 : off),
+          y: prop.y || 2.52,
+          z: prop.z + (isX ? off : 0),
+          rx: isX ? 0 : Math.PI / 2,
+          rz: isX ? Math.PI / 2 : 0,
+        });
+      }
+    } else if (prop.kind === "COLD_VENT") {
+      batch.add(SHARED_GEOS.box, s.fanBodyMat, {
+        x: prop.x,
+        y: h - 0.12,
+        z: prop.z,
+        sx: 0.95,
+        sy: 0.22,
+        sz: 0.95,
+      });
+      batch.add(SHARED_GEOS.box, s.frostMat, {
+        x: prop.x,
+        y: h - 0.22,
+        z: prop.z,
+        sx: 0.82,
+        sy: 0.04,
+        sz: 0.82,
+      });
+      batch.add(SHARED_GEOS.plane, s.frostMat, {
+        x: prop.x,
+        y: 0.009,
+        z: prop.z,
+        rx: -Math.PI / 2,
+        rz: 0.35,
+        sx: 1.85,
+        sy: 1.65,
+      });
     } else if (prop.kind === "STEAM_VENT") {
       batch.add(getSharedPipeGeometry(0.28, 0.4, 12), s.rustPipeMat, {
         x: prop.x,
         y: h - 0.2,
         z: prop.z,
       });
+      for (const [spIdx, yOff] of [0.45, 0.95].entries()) {
+        const wisp = new THREE.Sprite(s.steamSpriteMat);
+        wisp.position.set(prop.x, h - yOff, prop.z);
+        wisp.scale.set(1.15 + spIdx * 0.45, 1.15 + spIdx * 0.45, 1);
+        wisp.userData = { isSteamPlume: true };
+        group.add(wisp);
+        steamPlumes.push({
+          sprite: wisp,
+          baseY: h - 0.4,
+          phase: (Math.abs(prop.x + prop.z) + spIdx * 1.7) % 3.14,
+        });
+      }
     }
   }
 
-  // Interactables (Doors, Crawlspaces, Manila Resting Zone, Stairs, Sculpted Object 2 Keys)
+  // Interactables (Doors, Crawlspaces, Manila Resting Zone, Stairs, Grounded Object 2 Keys)
   for (const item of chunkData.interactables) {
     if (item.type === "STAIRS") {
+      const stairGrp = new THREE.Group();
+      stairGrp.position.set(item.x, 0, item.z);
+      stairGrp.rotation.y = item.context?.rotY ?? (item.id === "l1_floor_stairs_up" ? Math.PI : 0);
       for (let step = 0; step < 5; step += 1) {
-        const sGeo = createWorldScaledBoxGeometry(1.8, 0.28, 0.45, 2.0);
-        const sMesh = new THREE.Mesh(sGeo, mats.stairsMat);
-        sMesh.position.set(item.x, 0.14 + step * 0.28, item.z - 0.8 + step * 0.4);
+        const sMesh = new THREE.Mesh(getSharedBoxGeo(1.8, 0.28, 0.45, 2.0), mats.stairsMat);
+        sMesh.position.set(0, 0.14 + step * 0.28, -0.8 + step * 0.4);
         sMesh.castShadow = true;
         sMesh.receiveShadow = true;
-        group.add(sMesh);
+        stairGrp.add(sMesh);
       }
+      // Concrete side stringer curbs + dark steel handrails + landing platform + stairwell sign
+      for (const sx of [-0.96, 0.96]) {
+        const stringer = new THREE.Mesh(getSharedBoxGeo(0.14, 1.25, 2.2, 2.0), mats.stairsMat);
+        stringer.position.set(sx, 0.62, 0);
+        stringer.castShadow = true;
+        const rail = new THREE.Mesh(getSharedBoxGeo(0.05, 0.05, 2.35, 1.0), s.gantryMat);
+        rail.position.set(sx, 1.56, 0);
+        rail.rotation.x = -0.56;
+        stairGrp.add(stringer, rail);
+        for (const pz of [-0.85, 0.1, 0.95]) {
+          const post = new THREE.Mesh(SHARED_GEOS.box, s.gantryMat);
+          post.scale.set(0.045, 0.72, 0.045);
+          post.position.set(sx, 0.92 + (pz + 0.85) * 0.56, pz);
+          stairGrp.add(post);
+        }
+      }
+      const landing = new THREE.Mesh(getSharedBoxGeo(2.05, 0.28, 0.65, 2.0), mats.stairsMat);
+      landing.position.set(0, 1.38, 1.05);
+      const signFace = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.92, 0.34),
+        item.triggerType === "FLOOR_STAIRS" ? s.upFloorSignMat : s.stairsSignMat
+      );
+      signFace.position.set(0, 2.35, 0.8);
+      signFace.rotation.y = Math.PI;
+      stairGrp.add(landing, signFace);
+      group.add(stairGrp);
     } else if (item.type === "CRAWLSPACE_EXIT") {
       const cwGrp = new THREE.Group();
       cwGrp.position.set(item.x, 0, item.z);
@@ -2149,7 +2762,9 @@ function buildChunkGroup(chunkData) {
       }
       const spark = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), s.crawlSparkMat);
       spark.position.set(0.14, 0.38, 0.19);
+      spark.userData = { isSparkMesh: true };
       cwGrp.add(spark);
+      sparkMeshes.push(spark);
       const plaque = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.24, 0.22), s.fireExitSignMat);
       plaque.position.set(0, 1.28, 0);
       cwGrp.add(plaque);
@@ -2226,28 +2841,39 @@ function buildChunkGroup(chunkData) {
       group.add(doorGroup);
     } else if (item.type === "KEY_PICKUP") {
       if (!state.hasLevelKey) {
-        const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.42, 0.9, 16), mats.stairsMat);
-        ped.position.set(item.x, 0.45, item.z);
-        ped.castShadow = true;
-        group.add(ped);
+        const crate = new THREE.Mesh(getSharedBoxGeo(0.74, 0.72, 0.68, 1.5), s.warehouseSteelMat);
+        crate.position.set(item.x, 0.36, item.z);
+        crate.castShadow = true;
+        crate.receiveShadow = true;
+        group.add(crate);
 
+        // Grounded Object 2 Level Key resting flat on top of industrial crate (flashlight-glinting tag)
         const keyGrp = new THREE.Group();
-        keyGrp.position.set(item.x, 1.24, item.z);
-        const bow = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.025, 8, 16), s.brassMat);
-        bow.position.set(-0.15, 0, 0);
-        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.34, 8), s.brassMat);
+        keyGrp.position.set(item.x, 0.745, item.z);
+        keyGrp.rotation.set(Math.PI / 2, 0, 0.48);
+        keyGrp.userData = { isKeyPickup: true };
+        const bow = new THREE.Mesh(new THREE.TorusGeometry(0.10, 0.022, 8, 16), s.brassMat);
+        bow.position.set(-0.14, 0, 0);
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.32, 8), s.brassMat);
         shaft.rotation.z = Math.PI / 2;
-        shaft.position.set(0.12, 0, 0);
-        const tag = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.02), s.rimMat);
-        tag.position.set(-0.15, -0.09, 0);
+        shaft.position.set(0.11, 0, 0);
+        const tag = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.065, 0.022), s.rimMat);
+        tag.position.set(-0.14, -0.09, 0);
         keyGrp.add(bow, shaft, tag);
-        for (const tx of [0.16, 0.21, 0.26]) {
-          const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.065, 0.025), s.brassMat);
-          tooth.position.set(tx, -0.04, 0);
+        for (const tx of [0.15, 0.20, 0.25]) {
+          const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.06, 0.022), s.brassMat);
+          tooth.position.set(tx, -0.035, 0);
           keyGrp.add(tooth);
         }
         group.add(keyGrp);
         keyPickupMeshes.push(keyGrp);
+
+        const glint = new THREE.Sprite(s.keyGlintMat);
+        glint.position.set(item.x, 0.80, item.z);
+        glint.scale.set(0.45, 0.45, 1);
+        glint.userData = { isKeyGlint: true };
+        group.add(glint);
+        keyGlintSprites.push(glint);
       }
     }
   }
@@ -2257,27 +2883,45 @@ function buildChunkGroup(chunkData) {
 
   for (const lt of chunkData.lights) {
     const ry = lt.rotY || 0;
+    const bulbMat =
+      lt.subZone === "warehouse"
+        ? s.warehouseLightMat
+        : lt.subZone === "maintenance"
+          ? s.maintLightMat
+          : mats.ceilingEmissiveMat;
     if (chunkData.levelId === "manila_room") {
       const ltGrp = new THREE.Group();
       ltGrp.position.set(lt.x, lt.y, lt.z);
       const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.06, 16), s.brassMat);
       collar.position.set(0, 0.06, 0);
-      const dome = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 0.14, 16), mats.ceilingEmissiveMat);
+      const dome = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 0.14, 16), bulbMat);
       ltGrp.add(collar, dome);
       group.add(ltGrp);
     } else if (chunkData.levelId === "level_1") {
       batch.add(SHARED_GEOS.box, s.gantryMat, { x: lt.x, y: lt.y + 0.04, z: lt.z, ry, sx: 2.2, sy: 0.07, sz: 0.16 });
-      batch.add(getSharedPipeGeometry(0.032, 2.1, 8), mats.ceilingEmissiveMat, { x: lt.x, y: lt.y, z: lt.z, ry, rz: Math.PI / 2 });
+      batch.add(getSharedPipeGeometry(0.032, 2.1, 8), bulbMat, { x: lt.x, y: lt.y, z: lt.z, ry, rz: Math.PI / 2 });
     } else if (chunkData.levelId === "the_hub") {
       batch.add(SHARED_GEOS.box, s.gantryMat, { x: lt.x, y: lt.y + 0.04, z: lt.z, ry, sx: 0.46, sy: 0.1, sz: 0.46 });
-      batch.add(SHARED_GEOS.box, mats.ceilingEmissiveMat, { x: lt.x, y: lt.y, z: lt.z, ry, sx: 0.36, sy: 0.12, sz: 0.36 });
+      batch.add(SHARED_GEOS.box, bulbMat, { x: lt.x, y: lt.y, z: lt.z, ry, sx: 0.36, sy: 0.12, sz: 0.36 });
     } else if (chunkData.levelId === "level_2") {
-      batch.add(SHARED_GEOS.box, s.gantryMat, { x: lt.x, y: lt.y + 0.03, z: lt.z, ry, sx: 0.42, sy: 0.1, sz: 0.24 });
-      batch.add(SHARED_GEOS.box, mats.ceilingEmissiveMat, { x: lt.x, y: lt.y, z: lt.z, ry, sx: 0.32, sy: 0.11, sz: 0.16 });
+      // Caged industrial bulkhead ceiling lamp
+      batch.add(SHARED_GEOS.box, s.gantryMat, { x: lt.x, y: lt.y + 0.04, z: lt.z, ry, sx: 0.48, sy: 0.08, sz: 0.28 });
+      batch.add(SHARED_GEOS.box, bulbMat, { x: lt.x, y: lt.y - 0.01, z: lt.z, ry, sx: 0.34, sy: 0.10, sz: 0.18 });
+      for (const gx of [-0.14, 0, 0.14]) {
+        batch.add(SHARED_GEOS.box, s.warehouseSteelMat, {
+          x: lt.x + gx,
+          y: lt.y - 0.04,
+          z: lt.z,
+          ry,
+          sx: 0.025,
+          sy: 0.11,
+          sz: 0.22,
+        });
+      }
     } else {
       // level_0 flush acoustic troffer
       batch.add(SHARED_GEOS.box, s.outletMat, { x: lt.x, y: lt.y + 0.02, z: lt.z, ry, sx: 1.22, sy: 0.04, sz: 0.6 });
-      batch.add(SHARED_GEOS.box, mats.ceilingEmissiveMat, { x: lt.x, y: lt.y, z: lt.z, ry, sx: 1.14, sy: 0.05, sz: 0.52 });
+      batch.add(SHARED_GEOS.box, bulbMat, { x: lt.x, y: lt.y, z: lt.z, ry, sx: 1.14, sy: 0.05, sz: 0.52 });
     }
 
     const halo = new THREE.Sprite(haloMat);
@@ -2374,8 +3018,15 @@ function applyLevelEnvironment(levelId) {
   updateTextureStatusHud();
   ui.blackoutBanner.classList.add("hidden");
   smilerGroup.visible = false;
+  l2SmilerGroup.visible = false;
   state.blackoutActive = false;
   state.blackoutTimer = 0;
+  state.smilerCooldown = 0;
+  state.rebarCooldown = 0;
+  state.thermalLogCooldown = 0;
+  state.dripTimer = 0;
+  state.l2ClankTimer = 0;
+  state.currentSubZone = null;
   state.manilaDwellSec = 0;
   state.manilaWarnStep = 0;
   state.l2TremorTimer = 0;
@@ -2399,10 +3050,13 @@ function triggerGlitchFlash() {
   }, 420);
 }
 
-function switchLevel(targetLevelId, spawnPos = { x: 1.5, z: 1.5 }, reason = "") {
+function switchLevel(targetLevelId, spawnPos = { x: 1.5, z: 1.5 }, reason = "", resetOpts = {}) {
   keyPickupMeshes = [];
+  keyGlintSprites = [];
   ventFanRotors = [];
-  chunkManager.reset(targetLevelId, state.worldSeed);
+  steamPlumes = [];
+  sparkMeshes = [];
+  chunkManager.reset(targetLevelId, state.worldSeed, resetOpts);
   configureChunkStreamRadius(targetLevelId);
   state.currentLevelId = targetLevelId;
   state.player.x = spawnPos.x;
@@ -2468,6 +3122,9 @@ function executeInteraction() {
       for (const km of keyPickupMeshes) {
         km.visible = false;
       }
+      for (const gs of keyGlintSprites) {
+        gs.visible = false;
+      }
       addLog("Object 2 (Level Key) を取得しました！ The Hub の全金属扉を解錠できます。");
       updateHudTelemetry();
     }
@@ -2500,6 +3157,7 @@ function executeInteraction() {
       ...item.context,
       hasLevelKey: state.hasLevelKey,
       sequenceStep: state.hubSequenceStep,
+      currentFloor: state.l1FloorNumber,
     },
   });
 
@@ -2510,6 +3168,11 @@ function executeInteraction() {
 
   audio.playDoorTransition();
   triggerGlitchFlash();
+  if (result.ruleId === "L1_FLOOR_CHANGE") {
+    state.l1FloorNumber = result.targetFloor;
+    switchLevel("level_1", result.spawnPos, result.reason, { l1FloorNumber: state.l1FloorNumber });
+    return;
+  }
   state.hubSequenceStep = "none";
   switchLevel(result.targetLevelId, result.spawnPos, result.reason);
 }
@@ -2598,6 +3261,13 @@ window.addEventListener("keydown", (ev) => {
     if (ui.camcorderVignette) {
       ui.camcorderVignette.classList.toggle("hidden", !state.camcorderVisible);
     }
+  } else if (code === "KeyG") {
+    state.entitiesEnabled = !state.entitiesEnabled;
+    if (!state.entitiesEnabled) {
+      smilerGroup.visible = false;
+      l2SmilerGroup.visible = false;
+    }
+    addLog(`[ENTITY] エンティティ出現: ${state.entitiesEnabled ? "ON" : "OFF"} (Gキーで切替)`);
   }
 });
 
@@ -2624,12 +3294,14 @@ ui.btnEnter.addEventListener("click", () => {
   state.worldSeedStr = seedVal;
   state.worldSeed = hashStringToSeed(seedVal);
   state.started = true;
+  state.entitiesEnabled = Boolean(ui.entitiesToggle?.checked);
+  state.l1FloorNumber = 2;
   state.hasLevelKey = false;
   state.hubSequenceStep = "none";
 
   ui.overlay.classList.add("hidden");
   audio.init();
-  switchLevel(startLevel, { x: 1.5, z: 1.5 }, `シード "${seedVal}" で ${getLevelData(startLevel).name} へ進入`);
+  switchLevel(startLevel, { x: 1.5, z: 1.5 }, `シード "${seedVal}" で ${getLevelData(startLevel).name} へ進入`, { l1FloorNumber: 2 });
   if (renderer.domElement.requestPointerLock) {
     renderer.domElement.requestPointerLock();
   }
@@ -2674,7 +3346,8 @@ const shiftProbeVec = new THREE.Vector3();
 
 function updatePointLightPool(elapsedSec, currentLightHex, levelData) {
   const env = levelData.environment;
-  if (state.blackoutActive) {
+  const isolatedOnly = state.blackoutActive;
+  if (isolatedOnly && state.currentLevelId !== "level_1") {
     for (const pt of pointLightPool) pt.intensity = 0;
     return;
   }
@@ -2686,6 +3359,7 @@ function updatePointLightPool(elapsedSec, currentLightHex, levelData) {
       const chunk = chunkManager.chunks.get(`${state.currentLevelId}:${pcx + dx}:${pcz + dz}`);
       if (!chunk) continue;
       for (const lt of chunk.lights) {
+        if (isolatedOnly && !lt.subZone) continue;
         const ddx = lt.x - state.player.x;
         const ddz = lt.z - state.player.z;
         candidates.push({ lt, distSq: ddx * ddx + ddz * ddz });
@@ -2724,10 +3398,19 @@ function updatePointLightPool(elapsedSec, currentLightHex, levelData) {
     pt.position.set(lt.x, lt.y - 0.32, lt.z);
     pt.distance = range;
     pt.decay = decay;
-    pt.color.setHex(currentLightHex);
-    const flicker = env.lightFlicker
+    pt.color.setHex(lt.lightTint || currentLightHex);
+    let flicker = env.lightFlicker
       ? 0.92 + 0.08 * Math.sin(elapsedSec * 19 + (lt.flickerPhase || 0))
       : 1.0;
+    if (state.currentLevelId === "level_2" && (lt.stutter || state.l2TremorActiveTimer > 0)) {
+      const stutterWave = Math.sin(elapsedSec * 29 + (lt.flickerPhase || 0) * 3.1);
+      const gate = Math.sin(elapsedSec * 3.7 + (lt.flickerPhase || 0));
+      if (state.l2TremorActiveTimer > 0) {
+        flicker *= stutterWave > 0.25 ? 0.28 : 1.05;
+      } else if (gate > 0.52 && stutterWave > 0.35) {
+        flicker *= 0.22;
+      }
+    }
     pt.intensity = baseIntensity * flicker;
   }
 }
@@ -2736,6 +3419,21 @@ function updateAtmosphere(dt, elapsedSec) {
   const levelData = getLevelData(state.currentLevelId);
   const env = levelData.environment;
   const mats = materialCache.getMaterials(state.currentLevelId);
+  const s = mats.shared;
+
+  state.smilerCooldown = Math.max(0, state.smilerCooldown - dt);
+  state.thermalLogCooldown = Math.max(0, state.thermalLogCooldown - dt);
+
+  const subZone = state.currentLevelId === "level_1" ? getPlayerSubZone(state.player.x, state.player.z) : null;
+  const nextSubKind = subZone ? subZone.kind : null;
+  if (nextSubKind !== state.currentSubZone) {
+    state.currentSubZone = nextSubKind;
+    if (nextSubKind === "warehouse") {
+      addLog("[WAREHOUSE] 倍高倉庫エリアへ進入（気温34℃・独立電源のため停電時も安全）");
+    } else if (nextSubKind === "maintenance") {
+      addLog("[MAINTENANCE HALL] 白壁の保守通路へ進入（水たまりなし・独立電源）");
+    }
+  }
 
   if (env.blackoutIntervalSec > 0) {
     state.blackoutTimer += dt;
@@ -2746,7 +3444,7 @@ function updateAtmosphere(dt, elapsedSec) {
       ui.blackoutBanner.classList.remove("hidden");
       addLog(
         state.currentLevelId === "level_1"
-          ? "[BLACKOUT] 照明と壁コンセントの電源が遮断されました！Smilers に注意し懐中電灯 (F) を確保してください！"
+          ? "[BLACKOUT] 照明と壁コンセントの電源が遮断されました！懐中電灯 (F) を確保、倉庫・保守通路へ退避できます。"
           : "[BLACKOUT] 照明電源が遮断されました！懐中電灯 (F) を確保してください！"
       );
     } else if (state.blackoutActive && state.blackoutTimer >= env.blackoutDurationSec) {
@@ -2759,7 +3457,14 @@ function updateAtmosphere(dt, elapsedSec) {
     }
   }
 
-  if (state.currentLevelId === "level_1" && state.blackoutActive && !state.flashlightOn) {
+  // Entity behaviors (active ONLY when state.entitiesEnabled === true)
+  if (
+    state.entitiesEnabled &&
+    state.currentLevelId === "level_1" &&
+    state.blackoutActive &&
+    !state.flashlightOn &&
+    state.currentSubZone === null
+  ) {
     if (!smilerGroup.visible) {
       const dist = 10.5;
       smilerGroup.position.set(
@@ -2769,9 +3474,59 @@ function updateAtmosphere(dt, elapsedSec) {
       );
       smilerGroup.lookAt(state.player.x, 1.5, state.player.z);
       smilerGroup.visible = true;
+    } else {
+      const dx = state.player.x - smilerGroup.position.x;
+      const dz = state.player.z - smilerGroup.position.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 0.3) {
+        const step = Math.min(dist, 1.4 * dt);
+        smilerGroup.position.x += (dx / dist) * step;
+        smilerGroup.position.z += (dz / dist) * step;
+      }
+      smilerGroup.lookAt(state.player.x, 1.5, state.player.z);
+      if (dist < 2.1 && state.smilerCooldown <= 0) {
+        state.smilerCooldown = 5.0;
+        state.player.hazardDip = -0.18;
+        const inv = dist > 0.05 ? 1 / dist : 1;
+        state.player.knockbackVx = dx * inv * 4.5;
+        state.player.knockbackVz = dz * inv * 4.5;
+        triggerGlitchFlash();
+        audio.playBlackout(true);
+        addLog("[ENTITY 3] 暗闇で Smiler が接近！懐中電灯 (F) を点灯して撃退してください！");
+      }
     }
   } else {
     smilerGroup.visible = false;
+  }
+
+  if (
+    state.entitiesEnabled &&
+    state.currentLevelId === "level_2" &&
+    !state.flashlightOn &&
+    state.smilerCooldown <= 0
+  ) {
+    if (!l2SmilerGroup.visible) {
+      const dist = 12.0;
+      l2SmilerGroup.position.set(
+        state.player.x - Math.sin(state.player.yaw) * dist,
+        1.45,
+        state.player.z - Math.cos(state.player.yaw) * dist
+      );
+      l2SmilerGroup.lookAt(state.player.x, 1.45, state.player.z);
+      l2SmilerGroup.visible = true;
+    } else {
+      l2SmilerGroup.lookAt(state.player.x, 1.45, state.player.z);
+      const dist = Math.hypot(state.player.x - l2SmilerGroup.position.x, state.player.z - l2SmilerGroup.position.z);
+      if (dist < 4.0) {
+        l2SmilerGroup.visible = false;
+        state.smilerCooldown = 14.0;
+      }
+    }
+  } else {
+    if (l2SmilerGroup.visible && state.flashlightOn) {
+      state.smilerCooldown = 12.0;
+    }
+    l2SmilerGroup.visible = false;
   }
 
   let currentLightHex = env.lightColor;
@@ -2783,7 +3538,12 @@ function updateAtmosphere(dt, elapsedSec) {
     mats.ceilingEmissiveMat.color.setHex(state.blackoutActive ? 0x0b0b0c : env.lightColor);
   }
 
-  ambientLight.intensity = state.blackoutActive ? 0.03 : env.ambientIntensity;
+  ambientLight.intensity =
+    state.blackoutActive
+      ? state.currentLevelId === "level_1" && state.currentSubZone !== null
+        ? 0.34
+        : 0.03
+      : env.ambientIntensity;
   updatePointLightPool(elapsedSec, currentLightHex, levelData);
 
   // The Hub multi-language wall-mounted TV broadcast cycle (every 8s)
@@ -2823,7 +3583,18 @@ function updateAtmosphere(dt, elapsedSec) {
     }
   }
 
-  // Level 2 seismic tremor events (Wiki: frequent Ring-of-Fire magnitude earthquakes)
+  // Level 1 sparse ambient concrete water drips
+  if (state.currentLevelId === "level_1") {
+    state.dripTimer -= dt;
+    if (state.dripTimer <= 0) {
+      state.dripTimer = 7.0 + Math.random() * 7.0;
+      if (state.currentSubZone !== "maintenance") {
+        audio.playWaterDrip();
+      }
+    }
+  }
+
+  // Level 2 seismic tremors, pipe clanks, steam wisps, sparks & thermal extremity detection
   if (state.currentLevelId === "level_2") {
     state.l2TremorTimer += dt;
     if (state.l2TremorTimer >= 42.0) {
@@ -2835,13 +3606,64 @@ function updateAtmosphere(dt, elapsedSec) {
     if (state.l2TremorActiveTimer > 0) {
       state.l2TremorActiveTimer = Math.max(0, state.l2TremorActiveTimer - dt);
     }
+
+    state.l2ClankTimer -= dt;
+    if (state.l2ClankTimer <= 0) {
+      state.l2ClankTimer = 12.0 + Math.random() * 9.0;
+      audio.playPipeClank();
+    }
+
+    if (state.thermalLogCooldown <= 0) {
+      const { cx: pcx, cz: pcz } = chunkManager.worldToChunk(state.player.x, state.player.z);
+      const curChunk = chunkManager.chunks.get(`level_2:${pcx}:${pcz}`);
+      if (curChunk) {
+        for (const p of curChunk.props) {
+          if (p.kind !== "STEAM_VENT" && p.kind !== "COLD_VENT") continue;
+          if (Math.hypot(state.player.x - p.x, state.player.z - p.z) <= 2.8) {
+            state.thermalLogCooldown = 25.0;
+            if (p.kind === "STEAM_VENT") {
+              audio.playSteamBurst();
+              addLog("[THERMAL] 蒸気管周辺が高温（60〜100℃）に達しています — 高圧蒸気に注意");
+            } else {
+              addLog("[THERMAL] 通気口からの極寒気流と霜を観測 — 周囲の蒸気エリアと極端な温度差");
+            }
+            break;
+          }
+        }
+      }
+    }
   }
 
-  for (const km of keyPickupMeshes) {
-    if (km.visible) {
-      km.rotation.y += dt * 1.8;
-      km.position.y = 1.24 + Math.sin(elapsedSec * 2.5) * 0.08;
+  // Grounded Object 2 Level Key glint (brighter flare when flashlight shines near it)
+  if (!state.hasLevelKey && keyGlintSprites.length > 0 && s?.keyGlintMat) {
+    let peakFlare = 0.14;
+    const fwdX = -Math.sin(state.player.yaw);
+    const fwdZ = -Math.cos(state.player.yaw);
+    for (const gs of keyGlintSprites) {
+      if (!gs.visible) continue;
+      const dx = gs.position.x - state.player.x;
+      const dz = gs.position.z - state.player.z;
+      const dist = Math.hypot(dx, dz) || 1;
+      const dot = (dx / dist) * fwdX + (dz / dist) * fwdZ;
+      const litByFlashlight = state.flashlightOn && dist < 15.0 && dot > 0.78;
+      const pulse = 0.85 + 0.15 * Math.sin(elapsedSec * 4.2);
+      const sc = litByFlashlight ? 0.92 * pulse : dist < 7.0 ? 0.48 * pulse : 0.28;
+      gs.scale.set(sc, sc, 1);
+      if (litByFlashlight) peakFlare = Math.max(peakFlare, 0.72);
+      else if (dist < 7.0) peakFlare = Math.max(peakFlare, 0.28);
     }
+    s.keyGlintMat.opacity = peakFlare;
+  }
+
+  for (const sp of steamPlumes) {
+    const cycle = (elapsedSec * 0.45 + sp.phase) % 1.0;
+    sp.sprite.position.y = sp.baseY - cycle * 0.85;
+    const sc = 0.85 + cycle * 0.95;
+    sp.sprite.scale.set(sc, sc, 1);
+  }
+  for (const spark of sparkMeshes) {
+    const burst = Math.sin(elapsedSec * 43 + spark.position.x) * Math.sin(elapsedSec * 17 + spark.position.z);
+    spark.visible = burst > 0.55;
   }
   for (const rotor of ventFanRotors) {
     rotor.rotation.x += dt * 7.5;
@@ -3039,30 +3861,51 @@ function animate(now) {
       state.player.bobPhase = 0;
     }
 
-    if (state.currentLevelId === "level_1" && state.player.feetY < 0.12) {
+    if (state.currentLevelId === "level_1") {
+      state.rebarCooldown = Math.max(0, state.rebarCooldown - dt);
       const { cx: pcx, cz: pcz } = chunkManager.worldToChunk(state.player.x, state.player.z);
       const curChunk = chunkManager.chunks.get(`${state.currentLevelId}:${pcx}:${pcz}`);
       if (curChunk) {
-        for (const p of curChunk.props) {
-          if (p.kind !== "PUDDLE") continue;
-          const dx = state.player.x - p.x;
-          const dz = state.player.z - p.z;
-          const dist = Math.hypot(dx, dz);
-          if (p.isFalsePuddle && dist <= p.radius * 0.78 && state.player.falsePuddleCooldown <= 0) {
-            state.player.falsePuddleCooldown = 2.5;
-            state.player.hazardDip = -0.26;
-            const inv = dist > 0.05 ? 1 / dist : 0;
-            const dirX = dist > 0.05 ? dx * inv : Math.sin(state.player.yaw);
-            const dirZ = dist > 0.05 ? dz * inv : Math.cos(state.player.yaw);
-            state.player.knockbackVx = dirX * 4.2;
-            state.player.knockbackVz = dirZ * 4.2;
-            audio.playPuddleSplash();
-            addLog("[HAZARD] False Puddle に足を踏み入れた！鋭い歯に引きずり込まれる前に這い上がった！");
-            break;
+        if (state.player.feetY < 0.12) {
+          for (const p of curChunk.props) {
+            if (p.kind !== "PUDDLE") continue;
+            const dx = state.player.x - p.x;
+            const dz = state.player.z - p.z;
+            const dist = Math.hypot(dx, dz);
+            if (p.isFalsePuddle && dist <= p.radius * 0.78) {
+              if (state.entitiesEnabled && state.player.falsePuddleCooldown <= 0) {
+                state.player.falsePuddleCooldown = 2.5;
+                state.player.hazardDip = -0.28;
+                const inv = dist > 0.05 ? 1 / dist : 0;
+                const dirX = dist > 0.05 ? dx * inv : Math.sin(state.player.yaw);
+                const dirZ = dist > 0.05 ? dz * inv : Math.cos(state.player.yaw);
+                state.player.knockbackVx = dirX * 4.2;
+                state.player.knockbackVz = dirZ * 4.2;
+                audio.playPuddleSplash();
+                addLog("[HAZARD] False Puddle に足を踏み入れた！鋭い歯に引きずり込まれる前に這い上がった！");
+                break;
+              }
+              if (!state.entitiesEnabled && steppedFoot) {
+                audio.playPuddleSplash();
+                break;
+              }
+            }
+            if (!p.isFalsePuddle && steppedFoot && dist <= p.radius) {
+              audio.playPuddleSplash();
+              break;
+            }
           }
-          if (!p.isFalsePuddle && steppedFoot && dist <= p.radius) {
-            audio.playPuddleSplash();
-            break;
+        }
+        if (state.player.feetY < 0.45 && state.rebarCooldown <= 0) {
+          for (const p of curChunk.props) {
+            if (p.kind !== "REBAR_CLUSTER") continue;
+            if (Math.hypot(state.player.x - p.x, state.player.z - p.z) < 0.52) {
+              state.rebarCooldown = 3.0;
+              state.player.hazardDip = -0.10;
+              audio.playMetalScrape();
+              addLog("[HAZARD] 突き出た錆鉄筋に接触しました（Spaceジャンプで回避可能）。");
+              break;
+            }
           }
         }
       }

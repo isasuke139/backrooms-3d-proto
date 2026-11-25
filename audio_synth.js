@@ -493,4 +493,81 @@ export class BackroomsAudio {
     osc.start(now);
     osc.stop(now + 0.46);
   }
+
+  playWaterDrip() {
+    if (!this.init() || this.muted) return;
+    const now = this.ctx.currentTime;
+    const base = 1150 + Math.random() * 520;
+    for (const [offset, gainVal] of [[0, 0.10], [0.22, 0.032]]) {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(base, now + offset);
+      osc.frequency.exponentialRampToValueAtTime(base * 1.48, now + offset + 0.055);
+      g.gain.setValueAtTime(gainVal, now + offset);
+      g.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.09);
+      osc.connect(g);
+      g.connect(this.sfxGain);
+      osc.start(now + offset);
+      osc.stop(now + offset + 0.1);
+    }
+  }
+
+  playMetalScrape() {
+    if (!this.init() || this.muted) return;
+    const now = this.ctx.currentTime;
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = this._createNoiseBuffer(0.24);
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(1650, now);
+    bp.frequency.exponentialRampToValueAtTime(620, now + 0.18);
+    bp.Q.value = 3.2;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.22, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    noise.connect(bp);
+    bp.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(now);
+    noise.stop(now + 0.22);
+  }
+
+  playPipeClank() {
+    if (!this.init() || this.muted) return;
+    const now = this.ctx.currentTime;
+    const base = 240 + Math.random() * 140;
+    for (const [ratio, gainVal, dur] of [[1.0, 0.13, 0.36], [2.42, 0.07, 0.24], [3.85, 0.035, 0.16]]) {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(base * ratio, now);
+      osc.frequency.exponentialRampToValueAtTime(base * ratio * 0.94, now + dur);
+      g.gain.setValueAtTime(gainVal, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      osc.connect(g);
+      g.connect(this.sfxGain);
+      osc.start(now);
+      osc.stop(now + dur + 0.02);
+    }
+  }
+
+  playSteamBurst() {
+    if (!this.init() || this.muted) return;
+    const now = this.ctx.currentTime;
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = this._createNoiseBuffer(0.7);
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 1950;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.002, now);
+    g.gain.linearRampToValueAtTime(0.095, now + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.62);
+    noise.connect(hp);
+    hp.connect(g);
+    g.connect(this.sfxGain);
+    noise.start(now);
+    noise.stop(now + 0.65);
+  }
 }
